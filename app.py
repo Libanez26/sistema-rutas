@@ -30,10 +30,11 @@ if "df_mercaderistas" not in st.session_state:
         {"Mercaderista": "Ana Gómez", "Nro de Ruta": "Ruta M-02"}
     ])
 
+# Columnas con nombres únicos para evitar el conflicto
 columnas_clientes = [
     "Nro",
     "Vendedor",
-    "Nro de Ruta",
+    "Nro de Ruta (Ventas)",
     "Cliente",
     "Ubicacion",
     "Semana 1",
@@ -43,7 +44,7 @@ columnas_clientes = [
     "Tiempo de Despacho",
     "Mercaderia",
     "Mercaderista",
-    "Nro de Ruta",
+    "Nro de Ruta (Mercaderia)",
     "Tiempo de Mercaderia",
     "Día de Mercaderia Semana 1",
     "Día de Mercaderia Semana 2"
@@ -53,7 +54,7 @@ if "df_clientes" not in st.session_state:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
 # ==========================================
-# 2. NAVEGACIÓN POR PESTAÑAS (ESTILO SOBRIO)
+# 2. NAVEGACIÓN POR PESTAÑAS
 # ==========================================
 tab_db, tab_vendedores, tab_mercaderistas = st.tabs([
     "Base de Datos de Clientes", 
@@ -123,7 +124,7 @@ with tab_db:
         use_container_width=True,
         column_config={
             "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-            "Nro de Ruta": st.column_config.TextColumn("Nro de Ruta"),
+            "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
             "Cliente": st.column_config.TextColumn("Cliente", required=True),
             "Ubicacion": st.column_config.TextColumn("Ubicacion"),
             "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
@@ -133,6 +134,7 @@ with tab_db:
             "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
             "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
             "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+            "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
             "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
             "Día de Mercaderia Semana 1": st.column_config.SelectboxColumn("Día Merc. S1", options=dias_semana_opciones),
             "Día de Mercaderia Semana 2": st.column_config.SelectboxColumn("Día Merc. S2", options=dias_semana_opciones)
