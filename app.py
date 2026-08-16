@@ -177,17 +177,24 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-df_actual = st.session_state["df_clientes"]
+# Función callback para heredar automáticamente los datos de la fila anterior al agregar una nueva
+def procesar_herencia():
+    df = st.session_state["df_clientes"]
+    if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""):
+        fila_anterior = df.iloc[-2].copy()
+        for col in df.columns:
+            if col != "Cliente" and col != "Nro":
+                st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
+        st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
 
-# Si se añadieron filas nuevas mediante el editor, heredan los datos completos de la última fila previa
-if len(df_actual) > 0:
-    # Detectamos si el usuario agregó filas vacías al final en la sesión interactiva anterior
-    pass
+df_actual = st.session_state["df_clientes"]
 
 edited_df = st.data_editor(
     df_actual,
     num_rows="dynamic",
     use_container_width=True,
+    key="editor_clientes",
+    on_change=procesar_herencia,
     column_config={
         "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
         "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
@@ -206,18 +213,5 @@ edited_df = st.data_editor(
         "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2")
     }
 )
-
-# Copiar absolutamente todas las columnas de la última fila anterior si el usuario añade una nueva fila
-if len(edited_df) > len(df_actual) and len(df_actual) > 0:
-    ultima_fila_original = df_actual.iloc[-1].copy()
-    for idx in range(len(df_actual), len(edited_df)):
-        # Si la celda del cliente está vacía (nueva fila), copiamos toda la estructura de la fila anterior
-        cliente_val = edited_df.loc[idx, "Cliente"]
-        if pd.isna(cliente_val) or cliente_val == "":
-            for col in columnas_clientes:
-                if col != "Nro" and col != "Cliente":
-                    edited_df.loc[idx, col] = ultima_fila_original.get(col, "")
-            # Actualizar el número de secuencia correlativo
-            edited_df.loc[idx, "Nro"] = len(edited_df)
 
 st.session_state["df_clientes"] = edited_df
