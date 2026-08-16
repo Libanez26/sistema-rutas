@@ -68,7 +68,7 @@ columnas_clientes = [
     "Día de Mercaderia Semana 2"
 ]
 
-# Cargar datos desde Supabase al iniciar
+# Cargar datos desde Supabase al iniciar (Ordenados para evitar que se pierdan o alteren)
 if "df_clientes" not in st.session_state:
     if supabase:
         try:
@@ -76,7 +76,6 @@ if "df_clientes" not in st.session_state:
             data_db = response.data
             if data_db:
                 df_temp = pd.DataFrame(data_db)
-                # Eliminar columna id si viene de la base de datos para evitar conflictos
                 if "id" in df_temp.columns:
                     df_temp = df_temp.drop(columns=["id"])
                 
@@ -92,25 +91,27 @@ if "df_clientes" not in st.session_state:
     else:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
-# Función segura para guardar en Supabase (Borra e inserta todo el bloque actualizado)
+# Función de guardado inteligente con Upsert (Preserva datos anteriores y actualiza sin borrar de más)
 def guardar_en_supabase():
     if supabase:
         try:
             df_to_save = st.session_state["df_clientes"].copy()
             df_to_save = df_to_save.fillna("")
             
-            # Solo enviar filas que tengan al menos el nombre del cliente escrito
             df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
             
             records = df_to_save.to_dict(orient="records")
             
-            # Limpiar registros previos en la tabla y reinsertar los actuales
-            supabase.table("clientes_ananke").delete().neq("Nro", -999999).execute()
-            
-            if records:
-                supabase.table("clientes_ananke").insert(records).execute()
+            clean_records = []
+            for r in records:
+                clean_row = {k: r[k] for k in columnas_clientes if k in r}
+                clean_records.append(clean_row)
+
+            # Usamos upsert basado en la columna Nro para que persista y mantenga la info intacta
+            if clean_records:
+                supabase.table("clientes_ananke").upsert(clean_records, on_conflict="Nro").execute()
                 
-            st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
+            st.toast("¡Información guardada y sincronizada correctamente!", icon="☁️")
         except Exception as e:
             st.error(f"Error al guardar en Supabase: {e}")
 
@@ -241,11 +242,10 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-# Función callback para heredar filas nuevas, autocompletar rutas y guardar en Supabase
+# Función callback para heredar filas nuevas y autocompletar rutas
 def procesar_herencia():
     df = st.session_state["df_clientes"]
     
-    # 1. Herencia de nueva fila si el cliente está vacío
     if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""):
         fila_anterior = df.iloc[-2].copy()
         for col in df.columns:
@@ -253,7 +253,6 @@ def procesar_herencia():
                 st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
         st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
 
-    # 2. Autocompletar ruta de Vendedor y Mercaderista si cambian
     df_v = st.session_state["df_vendedores"]
     df_m = st.session_state["df_mercaderistas"]
     
@@ -274,9 +273,6 @@ def procesar_herencia():
                 if row["Nro de Ruta (Mercaderia)"] != ruta_m:
                     st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
 
-    # 3. Sincronizar cambios automáticamente con Supabase
-    guardar_en_supabase()
-
 df_actual = st.session_state["df_clientes"]
 
 edited_df = st.data_editor(
@@ -286,6 +282,7 @@ edited_df = st.data_editor(
     key="editor_clientes",
     on_change=procesar_herencia,
     column_config={
+        "Nro": st.column_config.NumberColumn("Nro", required=True),
         "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
         "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
         "Cliente": st.column_config.TextColumn("Cliente", required=True),
@@ -305,6 +302,10 @@ edited_df = st.data_editor(
 )
 
 st.session_state["df_clientes"] = edited_df
+
+# Botón explícito de guardado manual para asegurar persistencia permanente
+if st.button("💾 Guardar Cambios en la Base de Datos", type="primary", use_container_width=True):
+    guardar_en_supabase()
 
 # ==========================================
 # OPCIONES DE DESCARGA (EXCEL Y PDF)
