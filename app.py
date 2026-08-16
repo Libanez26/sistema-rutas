@@ -670,9 +670,9 @@ with tab_ruta_vendedores:
 
             st.markdown("---")
             st.subheader("📸 Generar Imagen Compacta para Enviar al Vendedor")
-            st.markdown("Crea y descarga una tarjeta visual resumida (cliente, ubicación y estatus) ideal para tomar captura o enviar directo por mensajería.")
+            st.markdown("Crea y descarga una tarjeta visual resumida ideal para tomar captura o enviar directo por mensajería.")
 
-            def generar_imagen_resumen_vendedor(df_f, vendedor_nom, dia_sel, semana_sel):
+            def generar_imagen_resumen_vendedor(df_f, vendedor_nom, dia_sel, semana_sel, es_toda_la_semana=False):
                 buffer = io.BytesIO()
                 doc = SimpleDocTemplate(
                     buffer,
@@ -703,7 +703,10 @@ with tab_ruta_vendedores:
                 )
 
                 elements.append(Paragraph(f"REPORTE DE RUTA - {vendedor_nom.upper()}", header_title_style))
-                elements.append(Paragraph(f"Día: <b>{dia_sel}</b> | Período: <b>{semana_sel}</b>", sub_title_style))
+                if es_toda_la_semana:
+                    elements.append(Paragraph(f"Reporte Completo | Período: <b>{semana_sel}</b>", sub_title_style))
+                else:
+                    elements.append(Paragraph(f"Día: <b>{dia_sel}</b> | Período: <b>{semana_sel}</b>", sub_title_style))
 
                 cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
                 head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
@@ -748,15 +751,30 @@ with tab_ruta_vendedores:
                 buffer.seek(0)
                 return buffer.getvalue()
 
-            pdf_imagen_bytes = generar_imagen_resumen_vendedor(df_filtrado, vendedor_seleccionado, dia_seleccionado, semana_seleccionada)
-            st.download_button(
-                label="📥 Descargar Reporte en PDF (Ideal para Vista Limpia / Captura)",
-                data=pdf_imagen_bytes,
-                file_name=f"Reporte_Ruta_{vendedor_seleccionado}_{dia_seleccionado}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary"
-            )
+            col_img1, col_img2 = st.columns(2)
+
+            with col_img1:
+                pdf_imagen_bytes = generar_imagen_resumen_vendedor(df_filtrado, vendedor_seleccionado, dia_seleccionado, semana_seleccionada, es_toda_la_semana=False)
+                st.download_button(
+                    label="📥 Descargar Reporte del Día (PDF)",
+                    data=pdf_imagen_bytes,
+                    file_name=f"Reporte_Ruta_{vendedor_seleccionado}_{dia_seleccionado}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            with col_img2:
+                df_toda_la_semana = df_seguimiento[mask_vendedor].copy()
+                pdf_semana_bytes = generar_imagen_resumen_vendedor(df_toda_la_semana, vendedor_seleccionado, dia_seleccionado, semana_seleccionada, es_toda_la_semana=True)
+                st.download_button(
+                    label="📥 Descargar Reporte Toda la Semana (PDF)",
+                    data=pdf_semana_bytes,
+                    file_name=f"Reporte_Ruta_{vendedor_seleccionado}_Toda_La_Semana.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
 
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
