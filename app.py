@@ -10,7 +10,7 @@ from reportlab.lib import colors
 from supabase import create_client, Client
 
 # Configuración inicial de la página
-st.set_page_config(page_title="Gestión de Rutas - Lácteos Ananké", layout="wide")
+st.set_page_config(page_title="Gestión de Rutas", layout="wide")
 
 # Configurar API de Gemini
 if "GEMINI_API_KEY" in st.secrets:
@@ -42,7 +42,7 @@ if "usuario" not in st.session_state:
     st.session_state["usuario"] = None
 
 if st.session_state["usuario"] is None:
-    st.title("🔑 Sistema Integral de Gestión de Rutas - Lácteos Ananké")
+    st.title("🔑 Sistema Integral de Gestión de Rutas")
     st.markdown("### Inicia sesión o regístrate para acceder a la plataforma.")
     
     tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
@@ -90,7 +90,7 @@ else:
 # ==========================================
 # APLICACIÓN PRINCIPAL
 # ==========================================
-st.title("Sistema Integral de Gestión de Rutas - Lácteos Ananké")
+st.title("Sistema Integral de Gestión de Rutas")
 
 if "df_vendedores" not in st.session_state:
   st.session_state["df_vendedores"] = pd.DataFrame([
@@ -127,7 +127,7 @@ columnas_clientes = [
 if "df_clientes" not in st.session_state:
   if supabase:
     try:
-      response = supabase.table("clientes_ananke").select("*").execute()
+      response = supabase.table("clientes").select("*").execute()
       data_db = response.data
       if data_db:
         df_temp = pd.DataFrame(data_db)
@@ -155,10 +155,10 @@ def guardar_en_supabase():
       df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
       records = df_to_save.to_dict(orient="records")
 
-      supabase.table("clientes_ananke").delete().neq("Nro", -999999).execute()
+      supabase.table("clientes").delete().neq("Nro", -999999).execute()
 
       if records:
-        supabase.table("clientes_ananke").insert(records).execute()
+        supabase.table("clientes").insert(records).execute()
 
       st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
     except Exception as e:
@@ -363,7 +363,7 @@ with col_dl1:
   st.download_button(
       label="📥 Descargar en Formato Excel (.xlsx)",
       data=excel_data,
-      file_name="Cuadro_Maestro_Rutas_Ananke.xlsx",
+      file_name="Cuadro_Maestro_Rutas.xlsx",
       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       use_container_width=True,
   )
@@ -384,7 +384,7 @@ with col_dl2:
         alignment=1,
     )
 
-    elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas - Lácteos Ananké", title_style))
+    elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas", title_style))
     elements.append(Spacer(1, 10))
 
     df_str = df.astype(str)
@@ -416,7 +416,7 @@ with col_dl2:
     st.download_button(
         label="📄 Descargar en Formato PDF",
         data=pdf_data,
-        file_name="Cuadro_Maestro_Rutas_Ananke.pdf",
+        file_name="Cuadro_Maestro_Rutas.pdf",
         mime="application/pdf",
         use_container_width=True,
     )
