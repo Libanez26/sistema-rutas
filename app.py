@@ -424,23 +424,18 @@ with tab_general:
             if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
               match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
               if not match_v.empty:
-                # Asignar automáticamente el Nro de Ruta correspondiente al vendedor
                 df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
                 
-                # ASOCIACIÓN DINÁMICA POR FILA (ÍNDICE):
-                # La fila del vendedor vincula directamente con la misma posición en Mercaderistas CCS
                 pos_vendedor = match_v.index[0]
                 if pos_vendedor < len(df_m):
                   mercaderista_asignado = df_m.iloc[pos_vendedor]["Mercaderista"]
                   ruta_mercaderia_asignada = df_m.iloc[pos_vendedor]["Nro de Ruta"]
                   
-                  # Si la celda de mercaderista está vacía, se autocompleta con el par de la misma fila
                   merc_actual_fila = row.get("Mercaderista")
                   if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
                     df_actualizado.at[idx, "Mercaderista"] = mercaderista_asignado
                     df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = ruta_mercaderia_asignada
                   else:
-                    # Si el usuario seleccionó manualmente otro mercaderista, aseguramos que su ruta corresponda a ese
                     match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
                     if not match_m.empty:
                       df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
@@ -822,3 +817,77 @@ with tab_ruta_vendedores:
                                 }
                             )
                             st.markdown("---")
+
+            # ==========================================
+            # SECCIÓN DE DESCARGA DE RUTAS EN PDF
+            # ==========================================
+            st.markdown("---")
+            st.subheader("📥 Descargar Reporte de Ruta")
+            
+            col_down1, col_down2 = st.columns(2)
+            
+            def generar_pdf_vendedor(df_vende, titulo_reporte):
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
+                elements = []
+
+                styles = getSampleStyleSheet()
+                title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1f4e78"), spaceAfter=12, alignment=1)
+
+                elements.append(Paragraph(titulo_reporte, title_style))
+                elements.append(Spacer(1, 5))
+
+                cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=1)
+                header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], fontSize=6.5, leading=8, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
+
+                data = []
+                cols_pdf = [c for c in ["Nro", "Cliente", "Ubicacion", "Nro de Ruta (Ventas)", "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2"] if c in df_vende.columns]
+                
+                df_pdf = df_vende[cols_pdf].fillna("No aplica").replace(r"^\s*$", "No aplica", regex=True)
+
+                header_row = [Paragraph(str(col), header_style) for col in df_pdf.columns]
+                data.append(header_row)
+
+                for _, row in df_pdf.iterrows():
+                    row_data = [Paragraph(str(val), cell_style) for val in row.values]
+                    data.append(row_data)
+
+                ancho_total_disponible = 762
+                col_widths = [ancho_total_disponible / len(cols_pdf)] * len(cols_pdf)
+
+                table = Table(data, colWidths=col_widths, repeatRows=1)
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                    ("TOPPADDING", (0, 0), (-1, 0), 5),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                ]))
+
+                elements.append(table)
+                doc.build(elements)
+                buffer.seek(0)
+                return buffer.getvalue()
+
+            with col_down1:
+                pdf_vendedor_bytes = generar_pdf_vendedor(df_filtrado, f"Reporte de Ruta - Vendedor: {vendedor_seleccionado}")
+                st.download_button(
+                    label=f"📥 Descargar Ruta de {vendedor_seleccionado}",
+                    data=pdf_vendedor_bytes,
+                    file_name=f"Ruta_{vendedor_seleccionado.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+            with col_down2:
+                df_todos_vendedores = df_seguimiento[df_seguimiento["Vendedor"].astype(str).str.strip() != ""]
+                pdf_todos_bytes = generar_pdf_vendedor(df_todos_vendedores, "Reporte de Ruta - Todos los Vendedores")
+                st.download_button(
+                    label="📥 Descargar Ruta de Todos",
+                    data=pdf_todos_bytes,
+                    file_name="Ruta_Todos_Los_Vendedores.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
