@@ -427,7 +427,6 @@ with tab_general:
       def generar_pdf(df):
         buffer = io.BytesIO()
         
-        # Columnas que deseas excluir del PDF
         columnas_a_excluir = [
             "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
             "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
@@ -435,7 +434,6 @@ with tab_general:
             "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
         ]
         
-        # Filtrar el DataFrame para remover las columnas del historial y rellenar celdas vacías con "No aplica"
         df_pdf = df.drop(columns=[col for col in columnas_a_excluir if col in df.columns], errors="ignore")
         df_pdf = df_pdf.fillna("No aplica")
         df_pdf = df_pdf.replace(r"^\s*$", "No aplica", regex=True)
@@ -489,8 +487,6 @@ with tab_general:
             row_data = [Paragraph(str(val), cell_style) for val in row.values]
             data.append(row_data)
 
-        # Ancho total disponible en la hoja horizontal (letter landscape = 792 pt, menos márgenes 30 pt = 762 pt)
-        # Distribuimos el ancho total proporcionalmente entre las columnas de df_pdf para que abarque más de la hoja
         ancho_total_disponible = 762
         num_columnas = len(df_pdf.columns)
         col_widths = [ancho_total_disponible / num_columnas] * num_columnas
@@ -530,7 +526,6 @@ with tab_ruta_vendedores:
 
     df_seguimiento = st.session_state["df_clientes"].copy()
     
-    # Asegurar columnas de historial
     for s_idx in [1, 2, 3, 4]:
         for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
             if c_field not in df_seguimiento.columns:
@@ -565,7 +560,6 @@ with tab_ruta_vendedores:
         else:
             st.success(f"Se encontraron **{len(df_filtrado)}** clientes para esta ruta.")
 
-            # Únicamente columnas de la semana actual en la tabla principal
             cols_a_mostrar = [
                 "Nro",
                 "Cliente",
@@ -611,7 +605,6 @@ with tab_ruta_vendedores:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
-                        # Rotación FIFO de 4 semanas
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
@@ -624,7 +617,6 @@ with tab_ruta_vendedores:
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
-                        # Guardar los datos ingresados en S1
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
@@ -633,7 +625,7 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
-            # SECCIÓN INFERIOR: Historial limpio y Detalle por cliente (Celdas separadas por semana)
+            # SECCIÓN INFERIOR: Historial limpio y Detalle por cliente integrado estilo tarjeta interactiva
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
             st.markdown("Resumen general con desglose individual de visitas y pedidos por semana:")
@@ -674,23 +666,52 @@ with tab_ruta_vendedores:
             )
 
             st.markdown("---")
-            st.subheader("🔍 Motivo detallado por Cliente (Semana Actual)")
             
-            # Crear una etiqueta única combinando el nombre del cliente y su ubicación para diferenciar duplicados
+            # Selector principal estilo tarjeta / plan de evaluaciones
             df_filtrado["Cliente_Display"] = df_filtrado["Cliente"].astype(str) + " — Ubicación: " + df_filtrado["Ubicacion"].astype(str)
             clientes_opciones_display = df_filtrado["Cliente_Display"].tolist()
 
             if clientes_opciones_display:
                 cliente_seleccionado_display = st.selectbox(
-                    "Selecciona el cliente y su ubicación para ver el detalle y motivo del pedido (S1):", 
+                    "🔍 Selecciona un cliente para desplegar su expediente e historial detallado:", 
                     clientes_opciones_display, 
                     key="select_detalle_motivo_ubicacion"
                 )
                 
                 cliente_row = df_filtrado[df_filtrado["Cliente_Display"] == cliente_seleccionado_display]
                 if not cliente_row.empty:
-                    motivo_s1 = cliente_row.iloc[0].get("Motivo_Pedido_S1", "")
-                    ubicacion_cliente = cliente_row.iloc[0].get("Ubicacion", "")
+                    c_data = cliente_row.iloc[0]
+                    nombre_cli = c_data.get("Cliente", "")
+                    ubicacion_cli = c_data.get("Ubicacion", "No especificada")
+                    ruta_cli = c_data.get("Nro de Ruta (Ventas)", "Sin ruta")
+
+                    st.markdown(f"### 📑 Expediente de Seguimiento: {nombre_cli}")
                     
-                    st.info(f"📍 **Ubicación:** {ubicacion_cliente if ubicacion_cliente else 'No especificada'}")
-                    st.success(f"📝 **Motivo del Pedido (Semana 1):** {motivo_s1 if motivo_s1 else 'No se registró ningún motivo para esta semana.'}")
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        st.markdown(f"📍 **Ubicación:** {ubicacion_cli}")
+                    with col_info2:
+                        st.markdown(f"🚚 **Nro de Ruta:** {ruta_cli}")
+
+                    detalle_semanas_rows = [
+                        {"Semana": "Semana 1 (Actual)", "Visita": c_data.get("Visita_S1", "No"), "Pedido": c_data.get("Pedido_S1", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S1", "Sin observaciones")},
+                        {"Semana": "Semana 2", "Visita": c_data.get("Visita_S2", "No"), "Pedido": c_data.get("Pedido_S2", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S2", "Sin observaciones")},
+                        {"Semana": "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
+                        {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
+                    ]
+                    
+                    df_detalle_cliente = pd.DataFrame(detalle_semanas_rows)
+                    
+                    st.data_editor(
+                        df_detalle_cliente,
+                        use_container_width=True,
+                        hide_index=True,
+                        disabled=True,
+                        key=f"tabla_detalle_{nombre_cli}",
+                        column_config={
+                            "Semana": st.column_config.TextColumn("Período / Semana", width="medium"),
+                            "Visita": st.column_config.TextColumn("¿Visitado?", width="small"),
+                            "Pedido": st.column_config.TextColumn("¿Hubo Pedido?", width="small"),
+                            "Motivo / Observación": st.column_config.TextColumn("Motivo Detallado", width="large"),
+                        }
+                    )
