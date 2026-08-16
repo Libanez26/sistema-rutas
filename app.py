@@ -19,13 +19,16 @@ else:
   st.error("Error: La API Key de Gemini no está configurada en los Secrets de Streamlit.")
 
 # ==========================================
-# CONEXIÓN A SUPABASE (Soporte para variables planas)
+# CONEXIÓN A SUPABASE (Soporte para variables planas y limpieza de URL)
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
   if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
+    url = st.secrets["SUPABASE_URL"].strip()
+    for sufijo in ["/rest/v1/", "/rest/v1", "/"]:
+      if url.endswith(sufijo):
+        url = url[: -len(sufijo)].strip()
+    key = st.secrets["SUPABASE_KEY"].strip()
     return create_client(url, key)
   return None
 
