@@ -322,7 +322,6 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-# ENVOLVEMOS LA TABLA Y EL BOTÓN EN UN FORMULARIO PARA QUE NADA SE REFRESQUE HASTA QUE HAGAS CLIC EN GUARDAR
 with st.form("form_cuadro_maestro"):
   edited_df = st.data_editor(
       st.session_state["df_clientes"],
@@ -354,7 +353,6 @@ with st.form("form_cuadro_maestro"):
   if submitted:
     df = edited_df.copy()
     if not df.empty:
-      # Procesar herencia automática solo al presionar Guardar
       if len(df) > 1:
         ultima_fila = df.iloc[-1]
         cliente_val = ultima_fila.get("Cliente", "")
