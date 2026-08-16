@@ -26,8 +26,8 @@ if "df_vendedores" not in st.session_state:
 
 if "df_mercaderistas" not in st.session_state:
     st.session_state["df_mercaderistas"] = pd.DataFrame([
-        {"Mercaderista": "Jose Pire", "Nro de Ruta": "Ruta M-02"},
-        {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"}
+        {"Mercaderista": "Carlos Pérez", "Nro de Ruta": "Ruta M-01"},
+        {"Mercaderista": "Ana Gómez", "Nro de Ruta": "Ruta M-02"}
     ])
 
 columnas_clientes = [
@@ -67,18 +67,15 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             if uploaded_file.name.endswith('.xlsx'):
                 df_excel = pd.read_excel(uploaded_file)
                 
-                # Limpiar espacios en blanco en los nombres de las columnas
                 df_excel.columns = df_excel.columns.str.replace(r'\s+', ' ', regex=True).str.strip()
                 
                 nuevo_df = pd.DataFrame()
                 nuevo_df["Nro"] = range(1, len(df_excel) + 1)
                 
-                # Normalizar columnas de texto para eliminar espacios basura internos
                 for col in df_excel.select_dtypes(include=['object']).columns:
                     df_excel[col] = df_excel[col].astype(str).str.strip()
                     df_excel[col] = df_excel[col].replace({'nan': '', 'None': ''})
 
-                # Mapear columnas considerando nombres exactos o variaciones con espacios múltiples en el Excel original
                 mapping_cols = {
                     'Vendedor': 'Vendedor',
                     'Nro de Ruta': 'Nro de Ruta (Ventas)',
@@ -98,7 +95,6 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                         continue
                     
                     encontrada = False
-                    # Buscar por mapeo directo
                     for orig, dest in mapping_cols.items():
                         if dest == col_target and orig in df_excel.columns:
                             nuevo_df[col_target] = df_excel[orig]
@@ -106,7 +102,6 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                             break
                     
                     if not encontrada:
-                        # Buscar columnas de días con espacios múltiples en el nombre (ej. "Día de Visita          Semana 1")
                         match_encontrado = False
                         for col_excel in df_excel.columns:
                             col_limpia = ' '.join(col_excel.split())
@@ -122,7 +117,6 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                             else:
                                 nuevo_df[col_target] = ""
 
-                # Estandarizar valores de Si/Sí para evitar duplicidad visual
                 for c in ["Semana 1", "Semana 2", "Mercaderia"]:
                     if c in nuevo_df.columns:
                         nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
@@ -185,6 +179,11 @@ lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropn
 
 df_actual = st.session_state["df_clientes"]
 
+# Si se añadieron filas nuevas mediante el editor, heredan los datos completos de la última fila previa
+if len(df_actual) > 0:
+    # Detectamos si el usuario agregó filas vacías al final en la sesión interactiva anterior
+    pass
+
 edited_df = st.data_editor(
     df_actual,
     num_rows="dynamic",
@@ -196,7 +195,6 @@ edited_df = st.data_editor(
         "Ubicacion": st.column_config.TextColumn("Ubicacion"),
         "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
         "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-        # Configurados como texto libre para permitir seleccionar varios días (ej: "Lunes, Jueves")
         "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
         "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
         "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
@@ -209,14 +207,17 @@ edited_df = st.data_editor(
     }
 )
 
-# Copiar formato de la última fila si se agrega una nueva
+# Copiar absolutamente todas las columnas de la última fila anterior si el usuario añade una nueva fila
 if len(edited_df) > len(df_actual) and len(df_actual) > 0:
     ultima_fila_original = df_actual.iloc[-1].copy()
     for idx in range(len(df_actual), len(edited_df)):
-        if pd.isna(edited_df.loc[idx, "Cliente"]) or edited_df.loc[idx, "Cliente"] == "":
-            edited_df.loc[idx, "Semana 1"] = ultima_fila_original.get("Semana 1", "Sí")
-            edited_df.loc[idx, "Semana 2"] = ultima_fila_original.get("Semana 2", "Sí")
-            edited_df.loc[idx, "Tiempo de Despacho"] = ultima_fila_original.get("Tiempo de Despacho", "24 HORAS")
-            edited_df.loc[idx, "Mercaderia"] = ultima_fila_original.get("Mercaderia", "Sí")
+        # Si la celda del cliente está vacía (nueva fila), copiamos toda la estructura de la fila anterior
+        cliente_val = edited_df.loc[idx, "Cliente"]
+        if pd.isna(cliente_val) or cliente_val == "":
+            for col in columnas_clientes:
+                if col != "Nro" and col != "Cliente":
+                    edited_df.loc[idx, col] = ultima_fila_original.get(col, "")
+            # Actualizar el número de secuencia correlativo
+            edited_df.loc[idx, "Nro"] = len(edited_df)
 
 st.session_state["df_clientes"] = edited_df
