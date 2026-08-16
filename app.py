@@ -656,16 +656,16 @@ with tab_ruta_vendedores:
                 key="editor_tabla_historial_checkboxes",
                 column_config={
                     "Ver Detalle": st.column_config.CheckboxColumn("Ver Detalle", default=False, required=True),
-                    "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
-                    "Ubicación": st.column_config.TextColumn("Ubicación", disabled=True),
-                    "Visita S1": st.column_config.TextColumn("Visita S1", disabled=True),
-                    "Pedido S1": st.column_config.TextColumn("Pedido S1", disabled=True),
-                    "Visita S2": st.column_config.TextColumn("Visita S2", disabled=True),
-                    "Pedido S2": st.column_config.TextColumn("Pedido S2", disabled=True),
-                    "Visita S3": st.column_config.TextColumn("Visita S3", disabled=True),
-                    "Pedido S3": st.column_config.TextColumn("Pedido S3", disabled=True),
-                    "Visita S4": st.column_config.TextColumn("Visita S4", disabled=True),
-                    "Pedido S4": st.column_config.TextColumn("Pedido S4", disabled=True),
+                    "Cliente": st.column_config.TextColumn("Cliente"),
+                    "Ubicación": st.column_config.TextColumn("Ubicación"),
+                    "Visita S1": st.column_config.TextColumn("Visita S1"),
+                    "Pedido S1": st.column_config.TextColumn("Pedido S1"),
+                    "Visita S2": st.column_config.TextColumn("Visita S2"),
+                    "Pedido S2": st.column_config.TextColumn("Pedido S2"),
+                    "Visita S3": st.column_config.TextColumn("Visita S3"),
+                    "Pedido S3": st.column_config.TextColumn("Pedido S3"),
+                    "Visita S4": st.column_config.TextColumn("Visita S4"),
+                    "Pedido S4": st.column_config.TextColumn("Pedido S4"),
                 }
             )
 
