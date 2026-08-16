@@ -107,10 +107,11 @@ columnas_clientes = [
     "Tiempo de Mercaderia",
     "Día de Mercaderia Semana 1",
     "Día de Mercaderia Semana 2",
-    "¿Se visitó?",
-    "Motivo (No visitó)",
-    "¿Hizo pedido?",
-    "Motivo (No hizo pedido)",
+    # Historial de 4 semanas rodantes para visitas y pedidos
+    "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
+    "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
+    "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
+    "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
 ]
 
 # Cargar Vendedores desde Supabase o usar valores por defecto
@@ -241,9 +242,8 @@ with tab_general:
             }
 
             for col_target in columnas_clientes:
-              if col_target in ["¿Se visitó?", "Motivo (No visitó)", "¿Hizo pedido?", "Motivo (No hizo pedido)"]:
-                if col_target not in nuevo_df.columns:
-                  nuevo_df[col_target] = ""
+              if col_target not in df_excel.columns and col_target not in nuevo_df.columns:
+                nuevo_df[col_target] = ""
                 continue
               if col_target == "Nro":
                 continue
@@ -269,7 +269,8 @@ with tab_general:
                   if col_target in df_excel.columns:
                     nuevo_df[col_target] = df_excel[col_target]
                   else:
-                    nuevo_df[col_target] = ""
+                    if col_target not in nuevo_df.columns:
+                      nuevo_df[col_target] = ""
 
             for c in ["Semana 1", "Semana 2", "Mercaderia"]:
               if c in nuevo_df.columns:
@@ -313,6 +314,7 @@ with tab_general:
           num_rows="dynamic",
           use_container_width=True,
           key="editor_vendedores_inline",
+          hide_index=True,
       )
 
     with col_merc:
@@ -322,6 +324,7 @@ with tab_general:
           num_rows="dynamic",
           use_container_width=True,
           key="editor_mercaderistas_inline",
+          hide_index=True,
       )
 
     if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
@@ -342,6 +345,7 @@ with tab_general:
           num_rows="dynamic",
           use_container_width=True,
           key="editor_clientes",
+          hide_index=True, # Oculta la columna redundante de la izquierda
           column_config={
               "Nro": st.column_config.NumberColumn("Nro", required=True),
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
@@ -359,10 +363,6 @@ with tab_general:
               "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
               "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
               "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-              "¿Se visitó?": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"]),
-              "Motivo (No visitó)": st.column_config.TextColumn("Motivo (No visitó)"),
-              "¿Hizo pedido?": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"]),
-              "Motivo (No hizo pedido)": st.column_config.TextColumn("Motivo (No hizo pedido)"),
           },
       )
 
@@ -475,28 +475,7 @@ with tab_general:
             row_data = [Paragraph(str(val), cell_style) for val in row.values]
             data.append(row_data)
 
-        col_widths = [
-            25,  # Nro
-            55,  # Vendedor
-            45,  # Nro de Ruta (Ventas)
-            65,  # Cliente
-            55,  # Ubicacion
-            35,  # Semana 1
-            35,  # Semana 2
-            50,  # Día de Visita Semana 1
-            50,  # Día de Visita Semana 2
-            45,  # Tiempo de Despacho
-            40,  # Mercaderia
-            55,  # Mercaderista
-            45,  # Nro de Ruta (Mercaderia)
-            45,  # Tiempo de Mercaderia
-            50,  # Día de Mercaderia Semana 1
-            50,   # Día de Mercaderia Semana 2
-            35,  # ¿Se visitó?
-            55,  # Motivo (No visitó)
-            35,  # ¿Hizo pedido?
-            55   # Motivo (No hizo pedido)
-        ]
+        col_widths = [25] * len(df.columns) # Anchos genéricos seguros
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
@@ -520,50 +499,54 @@ with tab_general:
 
 with tab_ruta_vendedores:
     st.header("Seguimiento de Ruta de Vendedores")
-    st.markdown("Filtra por vendedor y día de visita para gestionar el estatus de las visitas y los pedidos en terreno.")
+    st.markdown("Filtra por vendedor, semana de trabajo y día de visita para gestionar el estatus con un historial rodante de 4 semanas.")
 
     df_seguimiento = st.session_state["df_clientes"].copy()
-    columnas_control = ["¿Se visitó?", "Motivo (No visitó)", "¿Hizo pedido?", "Motivo (No hizo pedido)"]
-    for col in columnas_control:
-        if col not in df_seguimiento.columns:
-            df_seguimiento[col] = ""
+    
+    # Asegurar columnas de historial
+    for s_idx in [1, 2, 3, 4]:
+        for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
+            if c_field not in df_seguimiento.columns:
+                df_seguimiento[c_field] = ""
 
     vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
     
     if not vendedores_disponibles:
         st.warning("No hay vendedores registrados aún. Carga o ingresa información en el Cuadro Maestro primero.")
     else:
-        col_f1, col_f2 = st.columns(2)
+        col_f1, col_f2, col_f3 = st.columns(3)
         
         with col_f1:
             vendedor_seleccionado = st.selectbox("Seleccionar Vendedor", vendedores_disponibles, key="filtro_vendedor_ruta")
             
         with col_f2:
+            semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"], key="filtro_semana_ruta")
+
+        with col_f3:
             dias_opciones = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
             dia_seleccionado = st.selectbox("Seleccionar Día de Visita", dias_opciones, key="filtro_dia_ruta")
 
         mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
-        mask_dia = (
-            df_seguimiento["Día de Visita Semana 1"].astype(str).str.contains(dia_seleccionado, case=False, na=False) |
-            df_seguimiento["Día de Visita Semana 2"].astype(str).str.contains(dia_seleccionado, case=False, na=False)
-        )
+        
+        col_dia_filtro = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
+        mask_dia = df_seguimiento[col_dia_filtro].astype(str).str.contains(dia_seleccionado, case=False, na=False)
         
         df_filtrado = df_seguimiento[mask_vendedor & mask_dia].copy()
 
         if df_filtrado.empty:
-            st.info(f"No se encontraron clientes asignados al vendedor **{vendedor_seleccionado}** para el día **{dia_seleccionado}**.")
+            st.info(f"No se encontraron clientes asignados al vendedor **{vendedor_seleccionado}** para el día **{dia_seleccionado}** en la **{semana_seleccionada}**.")
         else:
             st.success(f"Se encontraron **{len(df_filtrado)}** clientes para esta ruta.")
 
+            # Columnas operativas a mostrar en la vista
             cols_a_mostrar = [
                 "Nro",
                 "Cliente",
                 "Ubicacion",
                 "Nro de Ruta (Ventas)",
-                "¿Se visitó?",
-                "Motivo (No visitó)",
-                "¿Hizo pedido?",
-                "Motivo (No hizo pedido)"
+                "Visita_S1",
+                "Pedido_S1",
+                "Motivo_Pedido_S1"
             ]
             
             for c in cols_a_mostrar:
@@ -578,28 +561,44 @@ with tab_ruta_vendedores:
                     use_container_width=True,
                     num_rows="fixed",
                     key="editor_ruta_vendedores",
+                    hide_index=True, # Oculta la columna redundante de la izquierda
                     column_config={
                         "Nro": st.column_config.NumberColumn("Nro", disabled=True),
                         "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
                         "Ubicacion": st.column_config.TextColumn("Ubicación", disabled=True),
                         "Nro de Ruta (Ventas)": st.column_config.TextColumn("Ruta", disabled=True),
-                        "¿Se visitó?": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"], required=True),
-                        "Motivo (No visitó)": st.column_config.TextColumn("Motivo de no visita (si aplica)"),
-                        "¿Hizo pedido?": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"], required=True),
-                        "Motivo (No hizo pedido)": st.column_config.TextColumn("Motivo de no pedido (si aplica)"),
+                        "Visita_S1": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"], required=True),
+                        "Pedido_S1": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"], required=True),
+                        "Motivo_Pedido_S1": st.column_config.TextColumn("Motivo / Observación (si aplica)"),
                     }
                 )
 
-                guardar_ruta_btn = st.form_submit_button("💾 Guardar Estatus de Ruta", type="primary", use_container_width=True)
+                guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial (4 Semanas)", type="primary", use_container_width=True)
 
                 if guardar_ruta_btn:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
-                        st.session_state["df_clientes"].at[orig_idx, "¿Se visitó?"] = row["¿Se visitó?"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo (No visitó)"] = row["Motivo (No visitó)"]
-                        st.session_state["df_clientes"].at[orig_idx, "¿Hizo pedido?"] = row["¿Hizo pedido?"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo (No hizo pedido)"] = row["Motivo (No hizo pedido)"]
+                        
+                        # APLICANDO LÓGICA DE ROTACIÓN DE 4 SEMANAS (FIFO):
+                        # La semana más antigua (S4) se elimina, S3 pasa a S4, S2 pasa a S3, S1 pasa a S2, 
+                        # y los datos nuevos se guardan en S1.
+                        st.session_state["df_clientes"].at[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S3"]
+                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"]
+
+                        st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S2"]
+                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S2"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S2"]
+
+                        st.session_state["df_clientes"].at[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S1"]
+                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S1"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S1"]
+
+                        # Guardar los datos ingresados actualmente en S1
+                        st.session_state["df_clientes"].at[orig_idx, "Visita_S1"] = row["Visita_S1"]
+                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
 
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
-                    st.success("¡Estatus de la ruta guardado y sincronizado con éxito!")
+                    st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
