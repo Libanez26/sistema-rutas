@@ -219,22 +219,24 @@ def guardar_en_base_de_datos(df):
       st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
-# LÓGICA CORREGIDA DE CÁLCULO DE DÍAS DE DESPACHO (CON SALTO DE SEMANA)
+# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO (EXCLUYENDO SÁBADOS Y DOMINGOS)
 # ==========================================
 def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_despacho):
     if not dia_visita_str or pd.isna(dia_visita_str) or str(dia_visita_str).strip() in ["", "nan", "None", "No asignado"]:
         return "No asignado"
     
-    dias_orden = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-    tiempo_limpio = str(tiempo_despacho).strip().upper()
+    # Días laborables válidos de lunes a viernes (índices 0 al 4)
+    dias_habiles = ["lunes", "martes", "miércoles", "jueves", "viernes"]
     
-    # Determinar salto de horas
+    # Mapeo general para identificar la posición considerando toda la semana
+    dias_orden_completo = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    
+    tiempo_limpio = str(tiempo_despacho).strip().upper()
     if "48" in tiempo_limpio:
-        saltos = 2
+        saltos_habiles = 2
     else: # 24 horas por defecto
-        saltos = 1
+        saltos_habiles = 1
 
-    # Manejar múltiples días separados por coma (ej. "Lunes, Jueves")
     sub_dias = [d.strip() for d in str(dia_visita_str).split(",")]
     resultados_despacho = []
 
@@ -245,22 +247,28 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
         elif d_limpio == "sabado":
             d_limpio = "sábado"
 
-        if d_limpio not in dias_orden:
+        if d_limpio not in dias_orden_completo:
             resultados_despacho.append(d_visita)
             continue
 
-        idx_actual = dias_orden.index(d_limpio)
-        idx_nuevo = idx_actual + saltos
+        # Si el día de visita cae en fin de semana, se ignora/no aplica para despacho hábil
+        if d_limpio in ["sábado", "domingo"]:
+            continue
+
+        idx_actual = dias_habiles.index(d_limpio)
+        idx_nuevo = idx_actual + saltos_habiles
         
-        # Determinar si pasa a la siguiente semana
-        if idx_nuevo >= len(dias_orden):
-            idx_nuevo = idx_nuevo % len(dias_orden)
+        if idx_nuevo >= len(dias_habiles):
+            idx_nuevo = idx_nuevo % len(dias_habiles)
             sig_semana = "Semana 2" if semana_actual == "Semana 1" else "Semana 1"
-            dia_nombre = dias_orden[idx_nuevo].capitalize()
+            dia_nombre = dias_habiles[idx_nuevo].capitalize()
             resultados_despacho.append(f"{dia_nombre} ({sig_semana})")
         else:
-            dia_nombre = dias_orden[idx_nuevo].capitalize()
+            dia_nombre = dias_habiles[idx_nuevo].capitalize()
             resultados_despacho.append(dia_nombre)
+
+    if not resultados_despacho:
+        return "No asignado"
 
     return ", ".join(resultados_despacho)
 
@@ -610,16 +618,13 @@ with tab_ruta_vendedores:
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         elif diferencia_dias > 10 and semana_seleccionada == semana_anterior_reg:
-            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y não avanzar?")
+            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y no avanzar?")
             if st.button("Sí, confirmar"):
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         else:
             st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
 
-        # ==========================================
-        # BOTÓN DE DESCARGA PDF DE RUTA (MATRICIAL)
-        # ==========================================
         def generar_pdf_matriz_vendedor(df_todos, vendedor_filtro):
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
@@ -909,18 +914,17 @@ with tab_ruta_vendedores:
                             st.markdown("---")
 
 # ==========================================
-# PESTAÑA: RUTA DE DESPACHO (SOLO CLIENTE, UBICACION, TIEMPO, DIA DESPACHO)
+# PESTAÑA: RUTA DE DESPACHO (EXCLUYENDO SÁBADOS Y DOMINGOS)
 # ==========================================
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
-    st.markdown("Visualización enfocada exclusivamente en el equipo de despachadores, calculando el día exacto de entrega según el tiempo de despacho (24 o 48 horas) y considerando los saltos entre semanas.")
+    st.markdown("Visualización enfocada exclusivamente en el equipo de despachadores, calculando el día exacto de entrega según el tiempo de despacho (24 o 48 horas) **saltando fines de semana (sábados y domingos)**.")
 
     df_despachos = st.session_state["df_clientes"].copy()
     
     if df_despachos.empty:
         st.info("No hay clientes registrados en la base de datos.")
     else:
-        # Filtros requeridos para la vista de despachos
         col_filtro_v, col_filtro_sem = st.columns(2)
         vendedores_opciones = ["Todos"] + sorted(list(set(df_despachos["Vendedor"].dropna().astype(str)) - {"_"}))
         
@@ -941,7 +945,7 @@ with tab_ruta_despacho:
             tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
             dia_visita_actual = r.get(col_visita_seleccionada, "")
             
-            # Calcular el día de despacho con la lógica exacta de horas y cruce de semana
+            # Cálculo de despacho omitiendo fines de semana
             dia_despacho_calculado = calcular_despacho_por_dia_y_semana(dia_visita_actual, semana_filtro_esp, tiempo_desp)
             
             datos_vista_despacho.append({
@@ -953,7 +957,6 @@ with tab_ruta_despacho:
 
         df_tabla_despacho_final = pd.DataFrame(datos_vista_despacho)
 
-        # Mostrar tabla solicitada: Cliente, Ubicación, Tiempo de Despacho, Día de Despacho
         st.dataframe(
             df_tabla_despacho_final,
             use_container_width=True,
@@ -962,6 +965,6 @@ with tab_ruta_despacho:
                 "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
                 "Ubicación": st.column_config.TextColumn("Ubicación", width="medium"),
                 "Tiempo de Despacho": st.column_config.TextColumn("Tiempo de Despacho", width="small"),
-                "Día de Despacho": st.column_config.TextColumn("🚀 Día de Despacho", width="medium"),
+                "Día de Despacho": st.column_config.TextColumn("🚀 Día de Despacho (Hábiles)", width="medium"),
             }
         )
