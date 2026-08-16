@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import json
+import io
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # Configuración inicial de la página
 st.set_page_config(page_title="Gestión de Rutas - Lácteos Ananké", layout="wide")
@@ -215,3 +220,81 @@ edited_df = st.data_editor(
 )
 
 st.session_state["df_clientes"] = edited_df
+
+# ==========================================
+# OPCIONES DE DESCARGA (EXCEL Y PDF)
+# ==========================================
+
+st.markdown("---")
+st.subheader("Opciones de Descarga del Cuadro Maestro")
+
+col_dl1, col_dl2 = st.columns(2)
+
+# 1. Botón para descargar en Excel
+with col_dl1:
+    output_excel = io.BytesIO()
+    with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+        st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name='Base de Datos')
+    excel_data = output_excel.getvalue()
+    
+    st.download_button(
+        label="📥 Descargar en Formato Excel (.xlsx)",
+        data=excel_data,
+        file_name="Cuadro_Maestro_Rutas_Ananke.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+# 2. Botón para descargar en PDF
+with col_dl2:
+    def generar_pdf(df):
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'TitleStyle',
+            parent=styles['Heading1'],
+            fontSize=14,
+            textColor=colors.HexColor('#1f4e78'),
+            spaceAfter=10,
+            alignment=1
+        )
+        
+        elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas - Lácteos Ananké", title_style))
+        elements.append(Spacer(1, 10))
+        
+        df_str = df.astype(str)
+        data = [df_str.columns.tolist()] + df_str.values.tolist()
+        
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4e78')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9f9f9')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    if not st.session_state["df_clientes"].empty:
+        pdf_data = generar_pdf(st.session_state["df_clientes"])
+        st.download_button(
+            label="📄 Descargar en Formato PDF",
+            data=pdf_data,
+            file_name="Cuadro_Maestro_Rutas_Ananke.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    else:
+        st.button("📄 Descargar en Formato PDF (Vacío)", disabled=True, use_container_width=True)
