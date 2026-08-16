@@ -363,7 +363,6 @@ lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropn
 
 df_actual = st.session_state["df_clientes"]
 
-# Renderizamos la tabla de forma totalmente aislada para que no se refresque mientras escribes
 edited_df = st.data_editor(
     df_actual,
     num_rows="dynamic",
