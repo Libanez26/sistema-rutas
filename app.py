@@ -516,7 +516,7 @@ with tab_general:
 
 with tab_ruta_vendedores:
     st.header("Seguimiento de Ruta de Vendedores")
-    st.markdown("Filtra por vendedor, semana de trabajo y día de visita para gestionar el estatus actual de la semana.")
+    st.markdown("Filtra por vendedor, semana de trabajo y día de visita para gestionar el estatus actual de la semana en formato de tabla limpia y compacta.")
 
     df_seguimiento = st.session_state["df_clientes"].copy()
     
@@ -596,33 +596,38 @@ with tab_ruta_vendedores:
                 if c not in df_filtrado.columns:
                     df_filtrado[c] = ""
 
-            df_view = df_filtrado[cols_a_mostrar]
+            df_view = df_filtrado[cols_a_mostrar].copy()
+
+            # Mapear valores de texto a Booleanos (True/False) para que aparezcan como casillas interactivas en la tabla
+            for col_bool in ["Visita_S1", "Pedido_S1"]:
+                if col_bool in df_view.columns:
+                    df_view[col_bool] = df_view[col_bool].apply(
+                        lambda x: True if str(x).strip().lower() in ["sí", "si", "true", "1", "verdadero"] else False
+                    )
 
             with st.form("form_ruta_vendedores"):
                 df_editado_ruta = st.data_editor(
                     df_view,
                     use_container_width=True,
                     num_rows="fixed",
-                    key="editor_ruta_vendedores",
+                    key="editor_ruta_vendedores_tabla",
                     hide_index=True,
                     column_config={
-                        "Nro": st.column_config.NumberColumn("Nro", disabled=True),
-                        "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
-                        "Ubicacion": st.column_config.TextColumn("Ubicación", disabled=True),
-                        "Nro de Ruta (Ventas)": st.column_config.TextColumn("Ruta", disabled=True),
-                        "Visita_S1": st.column_config.SelectboxColumn("Visita S1 (Actual)", options=["Sí", "No"], required=True),
-                        "Pedido_S1": st.column_config.SelectboxColumn("Pedido S1 (Actual)", options=["Sí", "No"], required=True),
-                        "Motivo_Pedido_S1": st.column_config.TextColumn("Motivo S1 (Actual)"),
+                        "Nro": st.column_config.NumberColumn("Nro", disabled=True, width="small"),
+                        "Cliente": st.column_config.TextColumn("Cliente", disabled=True, width="medium"),
+                        "Ubicacion": st.column_config.TextColumn("Ubicación", disabled=True, width="medium"),
+                        "Nro de Ruta (Ventas)": st.column_config.TextColumn("Ruta", disabled=True, width="small"),
+                        "Visita_S1": st.column_config.CheckboxColumn("¿Visita S1?", default=False),
+                        "Pedido_S1": st.column_config.CheckboxColumn("¿Pedido S1?", default=False),
+                        "Motivo_Pedido_S1": st.column_config.TextColumn("Motivo / Observación S1", width="large"),
                     }
                 )
 
-                col_b1, col_b2, col_b3 = st.columns(3)
+                col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial", type="primary", use_container_width=True)
                 with col_b2:
                     limpiar_semana_btn = st.form_submit_button("🔄 Limpiar Datos en Pantalla", use_container_width=True)
-                with col_b3:
-                    generar_imagen_btn = st.form_submit_button("🖼️ Generar y Visualizar Imagen", use_container_width=True)
 
                 if guardar_ruta_btn:
                     for s_idx in [1, 2, 3, 4]:
@@ -633,6 +638,10 @@ with tab_ruta_vendedores:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
+                        # Convertir booleans de vuelta a "Sí" o "No" para mantener consistencia general
+                        val_visita_str = "Sí" if row["Visita_S1"] else "No"
+                        val_pedido_str = "Sí" if row["Pedido_S1"] else "No"
+
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
@@ -645,8 +654,8 @@ with tab_ruta_vendedores:
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
-                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = val_visita_str
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = val_pedido_str
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
 
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
@@ -660,22 +669,6 @@ with tab_ruta_vendedores:
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
                     st.success("¡Datos de la Semana 1 limpiados con éxito!")
                     st.rerun()
-
-                if generar_imagen_btn:
-                    st.success("🖼️ **Vista previa de Tarjetas de Ruta Generadas (Conectadas con S1):**")
-                    for _, row_img in df_editado_ruta.iterrows():
-                        v_visita = str(row_img.get('Visita_S1', '')).strip().lower()
-                        v_pedido = str(row_img.get('Pedido_S1', '')).strip().lower()
-                        
-                        check_visita = "☑" if v_visita in ["sí", "si", "true", "1"] else "☐"
-                        check_pedido = "☑" if v_pedido in ["sí", "si", "true", "1"] else "☐"
-                        
-                        st.markdown(f"""
-                        > **Cliente:** {row_img.get('Cliente')}  
-                        > **Ubicación:** {row_img.get('Ubicacion')}  
-                        > Checklists S1: **Visita S1:** {check_visita} | **Pedido S1:** {check_pedido}
-                        """)
-                        st.markdown("---")
 
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
