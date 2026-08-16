@@ -35,6 +35,24 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+# Función auxiliar para normalizar días de la semana con sus acentos correctos
+def normalizar_dia(dia):
+    if pd.isna(dia) or not dia:
+        return ""
+    d = str(dia).strip().lower()
+    mapping = {
+        "lunes": "Lunes",
+        "martes": "Martes",
+        "miercoles": "Miércoles",
+        "miércoles": "Miércoles",
+        "jueves": "Jueves",
+        "viernes": "Viernes",
+        "sabado": "Sábado",
+        "sábado": "Sábado",
+        "domingo": "Domingo"
+    }
+    return mapping.get(d, str(dia).strip().capitalize())
+
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
 # ==========================================
@@ -233,6 +251,10 @@ with tab_general:
                 "Mercaderista": "Mercaderista",
                 "Nro de Ruta Mercaderista": "Nro de Ruta (Mercaderia)",
                 "Tiempo de Mercaderia": "Tiempo de Mercaderia",
+                "Día de Visita Semana 1": "Día de Visita Semana 1",
+                "Día de Visita Semana 2": "Día de Visita Semana 2",
+                "Día de Mercaderia Semana 1": "Día de Mercaderia Semana 1",
+                "Día de Mercaderia Semana 2": "Día de Mercaderia Semana 2",
             }
 
             for col_target in columnas_clientes:
@@ -270,6 +292,11 @@ with tab_general:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
+            # Normalizar días de la semana automáticamente
+            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
+              if col_dia in nuevo_df.columns:
+                nuevo_df[col_dia] = nuevo_df[col_dia].apply(normalizar_dia)
+
             st.session_state["df_clientes"] = nuevo_df
             st.success("¡Archivo Excel cargado con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlo a la base de datos.")
           else:
@@ -291,6 +318,10 @@ with tab_general:
             for col in columnas_clientes:
               if col not in df_ia.columns:
                 df_ia[col] = ""
+            
+            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
+              if col_dia in df_ia.columns:
+                df_ia[col_dia] = df_ia[col_dia].apply(normalizar_dia)
 
             st.session_state["df_clientes"] = df_ia[columnas_clientes]
             st.success("¡Datos del PDF extraídos con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlos a la base de datos.")
@@ -333,12 +364,23 @@ with tab_general:
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
+    # Ocultar las columnas operativas (Visita_S4, etc.) en el editor general para que no aparezcan molestando
+    columnas_excluir_vista_general = [
+        "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
+        "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
+        "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
+        "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
+    ]
+    columnas_para_mostrar_general = [c for c in columnas_clientes if c not in columnas_excluir_vista_general]
+
+    df_general_visible = st.session_state["df_clientes"][columnas_para_mostrar_general].copy()
+
     with st.form("form_cuadro_maestro"):
-      edited_df = st.data_editor(
-          st.session_state["df_clientes"],
+      edited_df_visible = st.data_editor(
+          df_general_visible,
           num_rows="dynamic",
           use_container_width=True,
-          key="editor_clientes",
+          key="editor_clientes_general",
           hide_index=True,
           column_config={
               "Nro": st.column_config.NumberColumn("Nro", required=True),
@@ -348,54 +390,66 @@ with tab_general:
               "Ubicacion": st.column_config.TextColumn("Ubicacion"),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+              "Día de Visita Semana 1": st.column_config.SelectboxColumn("Día Visita S1", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
+              "Día de Visita Semana 2": st.column_config.SelectboxColumn("Día Visita S2", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
               "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
               "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
               "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+              "Día de Mercaderia Semana 1": st.column_config.SelectboxColumn("Día Merc. S1", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
+              "Día de Mercaderia Semana 2": st.column_config.SelectboxColumn("Día Merc. S2", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
           },
       )
 
       submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
 
       if submitted:
-        df = edited_df.copy()
-        if not df.empty:
-          if len(df) > 1:
-            ultima_fila = df.iloc[-1]
+        df_actualizado = st.session_state["df_clientes"].copy()
+        
+        # Actualizar los campos editados preservando las columnas ocultas de historial
+        for col in edited_df_visible.columns:
+          df_actualizado[col] = edited_df_visible[col]
+
+        if not df_actualizado.empty:
+          if len(df_actualizado) > 1:
+            ultima_fila = df_actualizado.iloc[-1]
             cliente_val = ultima_fila.get("Cliente", "")
             if pd.isna(cliente_val) or str(cliente_val).strip() == "":
-              fila_anterior = df.iloc[-2].copy()
-              for col in df.columns:
+              fila_anterior = df_actualizado.iloc[-2].copy()
+              for col in df_actualizado.columns:
                 if col != "Cliente" and col != "Nro":
-                  df.at[df.index[-1], col] = fila_anterior[col]
+                  df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
               try:
-                df.at[df.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
+                df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
               except:
                 pass
 
           df_v = st.session_state["df_vendedores"]
           df_m = st.session_state["df_mercaderistas"]
 
-          for idx, row in df.iterrows():
+          for idx, row in df_actualizado.iterrows():
+            # Normalizar días en la persistencia
+            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
+              if col_dia in df_actualizado.columns:
+                df_actualizado.at[idx, col_dia] = normalizar_dia(row.get(col_dia))
+
+            # Re-vincular ruta de vendedor
             vendedor_actual = row.get("Vendedor")
             if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
-              match_v = df_v[df_v["Vendedor"] == vendedor_actual]
+              match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
               if not match_v.empty:
-                df.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+                df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
 
+            # Re-vincular ruta de mercaderista
             merc_actual = row.get("Mercaderista")
             if pd.notna(merc_actual) and str(merc_actual).strip() != "":
-              match_m = df_m[df_m["Mercaderista"] == merc_actual]
+              match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual).strip()]
               if not match_m.empty:
-                df.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+                df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
-        st.session_state["df_clientes"] = df
-        guardar_en_base_de_datos(df)
+        st.session_state["df_clientes"] = df_actualizado
+        guardar_en_base_de_datos(df_actualizado)
         st.rerun()
 
     st.markdown("---")
@@ -429,8 +483,6 @@ with tab_general:
         ]
         
         df_pdf = df.drop(columns=[col for col in columnas_a_excluir if col in df.columns], errors="ignore")
-        
-        # Reemplazar valores nulos, None o cadenas vacías por "No aplica" en todo el DataFrame del PDF
         df_pdf = df_pdf.fillna("No aplica")
         df_pdf = df_pdf.replace(r"^\s*$", "No aplica", regex=True)
         df_pdf = df_pdf.replace({None: "No aplica", "None": "No aplica", "nan": "No aplica", "NaN": "No aplica"})
@@ -576,7 +628,8 @@ with tab_ruta_vendedores:
         mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
         
         col_dia_filtro = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
-        mask_dia = df_seguimiento[col_dia_filtro].astype(str).str.contains(dia_seleccionado, case=False, na=False)
+        # Búsqueda robusta de día normalizado
+        mask_dia = df_seguimiento[col_dia_filtro].apply(lambda x: normalizar_dia(x)) == normalizar_dia(dia_seleccionado)
         
         df_filtrado = df_seguimiento[mask_vendedor & mask_dia].copy()
 
@@ -672,252 +725,8 @@ with tab_ruta_vendedores:
                     st.rerun()
 
             st.markdown("---")
-            st.subheader("📸 Generar Imagen Compacta para Enviar al Vendedor")
-            st.markdown("Crea y descarga una tarjeta visual resumida ideal para tomar captura o enviar directo por mensajería.")
-
-            def generar_imagen_resumen_vendedor(df_f, vendedor_nom, dia_sel, semana_sel, es_toda_la_semana=False):
-                buffer = io.BytesIO()
-                doc = SimpleDocTemplate(
-                    buffer,
-                    pagesize=landscape(letter),
-                    rightMargin=20,
-                    leftMargin=20,
-                    topMargin=20,
-                    bottomMargin=20
-                )
-                elements = []
-                styles = getSampleStyleSheet()
-
-                header_title_style = ParagraphStyle(
-                    "HeaderTitle",
-                    parent=styles["Heading1"],
-                    fontSize=12,
-                    textColor=colors.HexColor("#1f4e78"),
-                    alignment=1,
-                    spaceAfter=4
-                )
-                sub_title_style = ParagraphStyle(
-                    "SubTitle",
-                    parent=styles["Normal"],
-                    fontSize=9,
-                    textColor=colors.HexColor("#444444"),
-                    alignment=1,
-                    spaceAfter=12
-                )
-
-                elements.append(Paragraph(f"REPORTE DE RUTA - {vendedor_nom.upper()}", header_title_style))
-                if es_toda_la_semana:
-                    elements.append(Paragraph(f"Reporte Completo de Toda la Semana | Período: <b>{semana_sel}</b>", sub_title_style))
-                else:
-                    elements.append(Paragraph(f"Día: <b>{dia_sel}</b> | Período: <b>{semana_sel}</b>", sub_title_style))
-
-                cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
-                head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
-
-                if es_toda_la_semana:
-                    table_data = [[
-                        Paragraph("Nro", head_s),
-                        Paragraph("Cliente", head_s),
-                        Paragraph("Ubicación", head_s),
-                        Paragraph("Ruta", head_s),
-                        Paragraph("Día", head_s),
-                        Paragraph("Visita", head_s),
-                        Paragraph("Pedido", head_s),
-                        Paragraph("Motivo / Observación", head_s)
-                    ]]
-                else:
-                    table_data = [[
-                        Paragraph("Nro", head_s),
-                        Paragraph("Cliente", head_s),
-                        Paragraph("Ubicación", head_s),
-                        Paragraph("Ruta", head_s),
-                        Paragraph("Visita", head_s),
-                        Paragraph("Pedido", head_s),
-                        Paragraph("Motivo / Observación", head_s)
-                    ]]
-
-                col_dia_filtro = "Día de Visita Semana 1" if semana_sel == "Semana 1" else "Día de Visita Semana 2"
-
-                for _, r in df_f.iterrows():
-                    v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
-                    v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
-                    dia_visita_val = str(r.get(col_dia_filtro, ""))
-                    if not dia_visita_val or dia_visita_val.lower() in ["nan", "none", ""]:
-                        dia_visita_val = "No aplica"
-
-                    motivo_val = str(r.get("Motivo_Pedido_S1", ""))
-                    if not motivo_val or motivo_val.lower() in ["nan", "none", ""]:
-                        motivo_val = "No aplica"
-                    
-                    if es_toda_la_semana:
-                        table_data.append([
-                            Paragraph(str(r.get("Nro", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
-                            Paragraph(dia_visita_val, cell_s),
-                            Paragraph(v_visita, cell_s),
-                            Paragraph(v_pedido, cell_s),
-                            Paragraph(motivo_val, cell_s)
-                        ])
-                    else:
-                        table_data.append([
-                            Paragraph(str(r.get("Nro", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
-                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
-                            Paragraph(v_visita, cell_s),
-                            Paragraph(v_pedido, cell_s),
-                            Paragraph(motivo_val, cell_s)
-                        ])
-
-                if es_toda_la_semana:
-                    col_w = [30, 140, 110, 45, 65, 45, 45, 230]
-                else:
-                    col_w = [35, 150, 130, 50, 50, 50, 260]
-
-                t = Table(table_data, colWidths=col_w, repeatRows=1)
-                t.setStyle(TableStyle([
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
-                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
-                    ("TOPPADDING", (0, 0), (-1, -1), 4),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ]))
-
-                elements.append(t)
-                doc.build(elements)
-                buffer.seek(0)
-                return buffer.getvalue()
-
-            def generar_imagen_resumen_semanal_por_dias(df_f, vendedor_nom, semana_sel):
-                buffer = io.BytesIO()
-                doc = SimpleDocTemplate(
-                    buffer,
-                    pagesize=landscape(letter),
-                    rightMargin=20,
-                    leftMargin=20,
-                    topMargin=20,
-                    bottomMargin=20
-                )
-                elements = []
-                styles = getSampleStyleSheet()
-
-                header_title_style = ParagraphStyle(
-                    "HeaderTitle",
-                    parent=styles["Heading1"],
-                    fontSize=12,
-                    textColor=colors.HexColor("#1f4e78"),
-                    alignment=1,
-                    spaceAfter=4
-                )
-                sub_title_style = ParagraphStyle(
-                    "SubTitle",
-                    parent=styles["Normal"],
-                    fontSize=9,
-                    textColor=colors.HexColor("#444444"),
-                    alignment=1,
-                    spaceAfter=10
-                )
-                day_title_style = ParagraphStyle(
-                    "DayTitle",
-                    parent=styles["Heading2"],
-                    fontSize=10,
-                    textColor=colors.HexColor("#2C5E3B"),
-                    spaceBefore=8,
-                    spaceAfter=4,
-                    alignment=0
-                )
-
-                elements.append(Paragraph(f"REPORTE GENERAL DE RUTA - {vendedor_nom.upper()}", header_title_style))
-                elements.append(Paragraph(f"Desglose por Día de la Semana | Período: <b>{semana_sel}</b>", sub_title_style))
-
-                cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
-                head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
-
-                col_dia_filtro = "Día de Visita Semana 1" if semana_sel == "Semana 1" else "Día de Visita Semana 2"
-                dias_orden = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-
-                for dia in dias_orden:
-                    df_dia = df_f[df_f[col_dia_filtro].astype(str).str.contains(dia, case=False, na=False)].copy()
-                    if not df_dia.empty:
-                        elements.append(Paragraph(f"📅 Día: {dia.upper()}", day_title_style))
-                        
-                        table_data = [[
-                            Paragraph("Nro", head_s),
-                            Paragraph("Cliente", head_s),
-                            Paragraph("Ubicación", head_s),
-                            Paragraph("Ruta", head_s),
-                            Paragraph("Visita", head_s),
-                            Paragraph("Pedido", head_s),
-                            Paragraph("Motivo / Observación", head_s)
-                        ]]
-
-                        for _, r in df_dia.iterrows():
-                            v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
-                            v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
-                            
-                            motivo_val = str(r.get("Motivo_Pedido_S1", ""))
-                            if not motivo_val or motivo_val.lower() in ["nan", "none", ""]:
-                                motivo_val = "No aplica"
-
-                            table_data.append([
-                                Paragraph(str(r.get("Nro", "No aplica")), cell_s),
-                                Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
-                                Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
-                                Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
-                                Paragraph(v_visita, cell_s),
-                                Paragraph(v_pedido, cell_s),
-                                Paragraph(motivo_val, cell_s)
-                            ])
-
-                        col_w = [35, 150, 130, 50, 50, 50, 260]
-                        t = Table(table_data, colWidths=col_w, repeatRows=1)
-                        t.setStyle(TableStyle([
-                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
-                            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
-                            ("TOPPADDING", (0, 0), (-1, -1), 3),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                        ]))
-                        elements.append(t)
-                        elements.append(Spacer(1, 6))
-
-                doc.build(elements)
-                buffer.seek(0)
-                return buffer.getvalue()
-
-            col_img1, col_img2 = st.columns(2)
-
-            with col_img1:
-                pdf_imagen_bytes = generar_imagen_resumen_vendedor(df_filtrado, vendedor_seleccionado, dia_seleccionado, semana_seleccionada, es_toda_la_semana=False)
-                st.download_button(
-                    label="📥 Descargar Reporte del Día (PDF)",
-                    data=pdf_imagen_bytes,
-                    file_name=f"Reporte_Ruta_{vendedor_seleccionado}_{dia_seleccionado}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-            with col_img2:
-                df_toda_la_semana = df_seguimiento[mask_vendedor].copy()
-                pdf_semanal_por_dias_bytes = generar_imagen_resumen_semanal_por_dias(df_toda_la_semana, vendedor_seleccionado, semana_seleccionada)
-                st.download_button(
-                    label="📥 Descargar Reporte Semanal por Días (PDF)",
-                    data=pdf_semanal_por_dias_bytes,
-                    file_name=f"Reporte_Semanal_Dias_{vendedor_seleccionado}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-            st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
-            st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar sus detalles por semana:")
-
+            
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
@@ -956,41 +765,6 @@ with tab_ruta_vendedores:
                     "Pedido S4": st.column_config.TextColumn("Pedido S4"),
                 }
             )
-
-            with st.expander("🗑️ Borrar Información de la Semana en Seguimiento / Historial"):
-                tipo_borrado = st.radio(
-                    "¿Qué acción deseas realizar?",
-                    ["Borrar una semana en específico", "Borrar todas las semanas (Historial completo)"],
-                    key="radio_tipo_borrado"
-                )
-
-                if tipo_borrado == "Borrar una semana en específico":
-                    semana_a_borrar = st.selectbox(
-                        "Selecciona la semana que deseas limpiar:",
-                        ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
-                        key="select_semana_borrar_esp"
-                    )
-                    if st.button("🗑️ Confirmar Borrado de Semana Seleccionada", type="primary"):
-                        map_semanas = {
-                            "Semana 1": "S1",
-                            "Semana 2": "S2",
-                            "Semana 3": "S3",
-                            "Semana 4": "S4"
-                        }
-                        s_key = map_semanas[semana_a_borrar]
-                        for idx_c in df_filtrado.index:
-                            st.session_state["df_clientes"].loc[idx_c, [f"Visita_{s_key}", f"Pedido_{s_key}", f"Motivo_Pedido_{s_key}"]] = ""
-                        guardar_en_base_de_datos(st.session_state["df_clientes"])
-                        st.success(f"¡Información de la {semana_a_borrar} borrada con éxito para esta ruta!")
-                        st.rerun()
-                else:
-                    if st.button("⚠️ Confirmar Borrado de TODAS las Semanas", type="primary"):
-                        for idx_c in df_filtrado.index:
-                            for s_idx in [1, 2, 3, 4]:
-                                st.session_state["df_clientes"].loc[idx_c, [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]] = ""
-                        guardar_en_base_de_datos(st.session_state["df_clientes"])
-                        st.success("¡Historial completo de las 4 semanas borrado con éxito para esta ruta!")
-                        st.rerun()
 
             clientes_seleccionados_checkbox = df_historial_editado[df_historial_editado["Ver Detalle"] == True]
 
