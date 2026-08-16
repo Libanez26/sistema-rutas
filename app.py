@@ -108,14 +108,12 @@ columnas_clientes = [
     "Tiempo de Mercaderia",
     "Día de Mercaderia Semana 1",
     "Día de Mercaderia Semana 2",
-    # Historial de 4 semanas rodantes para visitas y pedidos
     "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
     "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
     "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
     "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
 ]
 
-# Cargar Vendedores desde Supabase o usar valores por defecto
 if "df_vendedores" not in st.session_state:
   if supabase:
     try:
@@ -135,7 +133,6 @@ if "df_vendedores" not in st.session_state:
         {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
     ])
 
-# Cargar Mercaderistas desde Supabase o usar valores por defecto
 if "df_mercaderistas" not in st.session_state:
   if supabase:
     try:
@@ -155,7 +152,6 @@ if "df_mercaderistas" not in st.session_state:
         {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
     ])
 
-# Cargar Clientes desde Supabase al iniciar
 if "df_clientes" not in st.session_state:
   if supabase:
     try:
@@ -203,9 +199,6 @@ def guardar_en_base_de_datos(df):
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
-# ==========================================
-# PESTAÑAS PRINCIPALES (GENERAL Y RUTA DE VENDEDORES)
-# ==========================================
 tab_general, tab_ruta_vendedores = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores"])
 
 with tab_general:
@@ -669,16 +662,21 @@ with tab_ruta_vendedores:
                     st.rerun()
 
                 if generar_imagen_btn:
-                    st.success("🖼️ **Vista previa de Tarjeta / Imagen de Ruta Generada:**")
+                    st.success("🖼️ **Vista previa de Tarjetas de Ruta Generadas (Conectadas con S1):**")
                     for _, row_img in df_editado_ruta.iterrows():
+                        v_visita = str(row_img.get('Visita_S1', '')).strip().lower()
+                        v_pedido = str(row_img.get('Pedido_S1', '')).strip().lower()
+                        
+                        check_visita = "☑" if v_visita in ["sí", "si", "true", "1"] else "☐"
+                        check_pedido = "☑" if v_pedido in ["sí", "si", "true", "1"] else "☐"
+                        
                         st.markdown(f"""
                         > **Cliente:** {row_img.get('Cliente')}  
                         > **Ubicación:** {row_img.get('Ubicacion')}  
-                        > **Checklist Visita S1:** {row_img.get('Visita_S1')} | **Pedido S1:** {row_img.get('Pedido_S1')}  
-                        ---
+                        > Checklists S1: **Visita S1:** {check_visita} | **Pedido S1:** {check_pedido}
                         """)
+                        st.markdown("---")
 
-            # SECCIÓN INFERIOR: Historial limpio con casilla selectora para expediente y opciones de borrado avanzado
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
             st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar sus detalles por semana:")
