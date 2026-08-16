@@ -345,7 +345,7 @@ with tab_general:
           num_rows="dynamic",
           use_container_width=True,
           key="editor_clientes",
-          hide_index=True, # Oculta la columna redundante de la izquierda
+          hide_index=True,
           column_config={
               "Nro": st.column_config.NumberColumn("Nro", required=True),
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
@@ -475,7 +475,7 @@ with tab_general:
             row_data = [Paragraph(str(val), cell_style) for val in row.values]
             data.append(row_data)
 
-        col_widths = [25] * len(df.columns) # Anchos genéricos seguros
+        col_widths = [25] * len(df.columns)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
@@ -547,7 +547,6 @@ with tab_ruta_vendedores:
         else:
             st.success(f"Se encontraron **{len(df_filtrado)}** clientes para esta ruta.")
 
-            # Incluimos el historial de las 4 semanas para que se despliegue en la vista
             cols_a_mostrar = [
                 "Nro",
                 "Cliente",
@@ -599,32 +598,49 @@ with tab_ruta_vendedores:
                 guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial (4 Semanas)", type="primary", use_container_width=True)
 
                 if guardar_ruta_btn:
+                    # 1. Asegurar columnas de historial en el estado global
                     for s_idx in [1, 2, 3, 4]:
-                        for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
-                            if c_field not in st.session_state["df_clientes"].columns:
-                                st.session_state["df_clientes"][c_field] = ""
+                        for campo in ["Visita", "Pedido", "Motivo_Pedido"]:
+                            col_nombre = f"{campo}_S{s_idx}"
+                            if col_nombre not in st.session_state["df_clientes"].columns:
+                                st.session_state["df_clientes"][col_nombre] = ""
 
+                    # 2. Recorrer las filas editadas y aplicar el desplazamiento FIFO exacto
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
-                        # Rotación FIFO de 4 semanas
-                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
+                        # Capturar valores previos del state global antes de rotar
+                        v1 = str(st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] or "")
+                        p1 = str(st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] or "")
+                        m1 = str(st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] or "")
 
-                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"]
+                        v2 = str(st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] or "")
+                        p2 = str(st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] or "")
+                        m2 = str(st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] or "")
 
-                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
+                        v3 = str(st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"] or "")
+                        p3 = str(st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"] or "")
+                        m3 = str(st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"] or "")
 
-                        # Guardar los datos ingresados en S1
+                        # Desplazamiento hacia atrás en cadena
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = v3
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = p3
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = m3
+
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"] = v2
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"] = p2
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"] = m2
+
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] = v1
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = p1
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = m1
+
+                        # Guardar los nuevos datos ingresados en S1
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
 
+                    # 3. Guardar cambios en la base de datos y recargar interfaz
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
