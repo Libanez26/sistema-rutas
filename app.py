@@ -604,7 +604,7 @@ with tab_ruta_vendedores:
 
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Motiyo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
                         # Guardar los datos ingresados en S1
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
