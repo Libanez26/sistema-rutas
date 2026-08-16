@@ -411,7 +411,15 @@ with col_dl1:
 with col_dl2:
   def generar_pdf(df):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+    # Usamos formato horizontal (landscape) con márgenes de 15 para aprovechar el ancho al máximo
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=landscape(letter), 
+        rightMargin=15, 
+        leftMargin=15, 
+        topMargin=20, 
+        bottomMargin=20
+    )
     elements = []
 
     styles = getSampleStyleSheet()
@@ -420,29 +428,77 @@ with col_dl2:
         parent=styles["Heading1"],
         fontSize=14,
         textColor=colors.HexColor("#1f4e78"),
-        spaceAfter=10,
+        spaceAfter=12,
         alignment=1,
     )
 
     elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas", title_style))
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 5))
 
-    df_str = df.astype(str)
-    data = [df_str.columns.tolist()] + df_str.values.tolist()
+    # Estilos para celdas y encabezados limpios
+    cell_style = ParagraphStyle(
+        "CellStyle",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8,
+        alignment=1, # Centrado
+    )
+    
+    header_style = ParagraphStyle(
+        "HeaderStyle",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8,
+        textColor=colors.whitesmoke,
+        fontName="Helvetica-Bold",
+        alignment=1,
+    )
 
-    table = Table(data, repeatRows=1)
+    data = []
+    header_row = [Paragraph(str(col), header_style) for col in df.columns]
+    data.append(header_row)
+
+    for _, row in df.iterrows():
+        row_data = [Paragraph(str(val), cell_style) for val in row.values]
+        data.append(row_data)
+
+    # Ancho total disponible en Letter horizontal con márgenes de 15 = 762 puntos.
+    # Distribuimos los anchos personalizados por columna para que las de texto largo tengan espacio:
+    # Orden de columnas: Nro, Vendedor, Nro de Ruta (Ventas), Cliente, Ubicacion, Semana 1, Semana 2, 
+    # Día Visita S1, Día Visita S2, Tiempo Despacho, Mercaderia, Mercaderista, Nro de Ruta (Mercaderia), 
+    # Tiempo Mercaderia, Día Merc. S1, Día Merc. S2
+    col_widths = [
+        25,  # Nro
+        55,  # Vendedor
+        45,  # Nro de Ruta (Ventas)
+        65,  # Cliente
+        55,  # Ubicacion
+        35,  # Semana 1
+        35,  # Semana 2
+        50,  # Día de Visita Semana 1
+        50,  # Día de Visita Semana 2
+        45,  # Tiempo de Despacho
+        40,  # Mercaderia
+        55,  # Mercaderista
+        45,  # Nro de Ruta (Mercaderia)
+        45,  # Tiempo de Mercaderia
+        50,  # Día de Mercaderia Semana 1
+        50   # Día de Mercaderia Semana 2
+    ] # Total exacto ajustado al ancho de página
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(
         TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4e78")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            # Encabezado verde oscuro corporativo (similar al de tu captura de referencia)
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
-            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f9f9f9")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-            ("FONTSIZE", (0, 1), (-1, -1), 7),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+            ("TOPPADDING", (0, 0), (-1, 0), 5),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+            ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
+            ("TOPPADDING", (0, 1), (-1, -1), 4),
         ])
     )
 
@@ -450,15 +506,3 @@ with col_dl2:
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
-
-  if not st.session_state["df_clientes"].empty:
-    pdf_data = generar_pdf(st.session_state["df_clientes"])
-    st.download_button(
-        label="📄 Descargar en Formato PDF",
-        data=pdf_data,
-        file_name="Cuadro_Maestro_Rutas.pdf",
-        mime="application/pdf",
-        use_container_width=True,
-    )
-  else:
-    st.button("📄 Descargar en Formato PDF (Vacío)", disabled=True, use_container_width=True)
