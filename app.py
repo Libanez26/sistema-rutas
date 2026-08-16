@@ -544,7 +544,6 @@ with tab_ruta_vendedores:
             
         with col_f2:
             fecha_gestion = st.date_input("Fecha de Gestión", value=datetime.now().date(), key="filtro_fecha_gestion")
-            # Cálculo matemático de la semana basado en el número de la semana del año de la fecha seleccionada
             num_iso_semana = fecha_gestion.isocalendar()[1]
             semana_calculada_auto = "Semana 1" if num_iso_semana % 2 != 0 else "Semana 2"
 
@@ -555,19 +554,16 @@ with tab_ruta_vendedores:
             dias_opciones = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
             dia_seleccionado = st.selectbox("Seleccionar Día de Visita", dias_opciones, key="filtro_dia_ruta")
 
-        # Lógica de advertencia de cambio de semana basada en la fecha y secuencia
         if "historial_semana_previa" not in st.session_state:
             st.session_state["historial_semana_previa"] = {
                 "semana": semana_seleccionada,
                 "fecha": fecha_gestion
             }
 
-        # Comprobar si se desvió del orden esperado de semanas según el avance de días/fechas
         semana_anterior_reg = st.session_state["historial_semana_previa"]["semana"]
         fecha_anterior_reg = st.session_state["historial_semana_previa"]["fecha"]
 
         diferencia_dias = (fecha_gestion - fecha_anterior_reg).days
-        # Si se avanza aproximadamente una semana (de 5 a 10 días), debería alternar de Semana 1 a 2 o viceversa
         if 5 <= diferencia_dias <= 10 and semana_seleccionada == semana_anterior_reg:
             st.warning(f"⚠️ Estás seleccionando la misma **{semana_seleccionada}** habiendo avanzado una semana en el calendario (Fecha: {fecha_gestion.strftime('%d/%m/%Y')}). ¿Estás seguro de mantener esta semana?")
             if st.button("Sí, confirmar cambio/mantener semana"):
@@ -579,7 +575,6 @@ with tab_ruta_vendedores:
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         else:
-            # Actualizar registro si todo está bajo orden consecutivo
             st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
 
         mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
@@ -632,7 +627,7 @@ with tab_ruta_vendedores:
                 with col_b1:
                     guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial", type="primary", use_container_width=True)
                 with col_b2:
-                    borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True) # <-- Cambiado a minúscula
+                    borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True)
                 with col_b3:
                     generar_imagen_btn = st.form_submit_button("🖼️ Generar y Visualizar Imagen", use_container_width=True)
 
@@ -645,10 +640,6 @@ with tab_ruta_vendedores:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
-                        # Si se presionó el botón de borrar historial, podemos limpiar los valores en lugar de rotarlos, 
-                        # o ajustar la lógica según prefieras para tus pruebas.
-                        
-                        # Desplazamiento rotativo conectado: S1 se vuelve el más nuevo, desplazando hacia atrás los anteriores (S1 pasa a S2, S2 a S3, etc.)
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
@@ -679,15 +670,7 @@ with tab_ruta_vendedores:
                         ---
                         """)
 
-            # Botón externo para limpiar/borrar información de la semana en la sección de Seguimiento si se cambia de semana
-            if st.button("🗑️ Borrar Información de la Semana en Seguimiento"):
-                for idx_c in df_seguimiento.index:
-                    st.session_state["df_clientes"].loc[idx_c, ["Visita_S1", "Pedido_S1", "Motivo_Pedido_S1"]] = ""
-                guardar_en_base_de_datos(st.session_state["df_clientes"])
-                st.success("Información de la semana limpiada con éxito en la sección de seguimiento.")
-                st.rerun()
-
-            # SECCIÓN INFERIOR: Historial limpio con casilla selectora para desplegar el expediente y motivo detallado
+            # SECCIÓN INFERIOR: Historial limpio con casilla selectora para expediente y opciones de borrado avanzado
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
             st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar su expediente y motivo detallado por semana:")
@@ -731,6 +714,42 @@ with tab_ruta_vendedores:
                 }
             )
 
+            # Panel de opciones de borrado inteligente ubicado exactamente aquí
+            with st.expander("🗑️ Borrar Información de la Semana en Seguimiento / Historial"):
+                tipo_borrado = st.radio(
+                    "¿Qué acción deseas realizar?",
+                    ["Borrar una semana en específico", "Borrar todas las semanas (Historial completo)"],
+                    key="radio_tipo_borrado"
+                )
+
+                if tipo_borrado == "Borrar una semana en específico":
+                    semana_a_borrar = st.selectbox(
+                        "Selecciona la semana que deseas limpiar:",
+                        ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
+                        key="select_semana_borrar_esp"
+                    )
+                    if st.button("🗑️ Confirmar Borrado de Semana Seleccionada", type="primary"):
+                        map_semanas = {
+                            "Semana 1": "S1",
+                            "Semana 2": "S2",
+                            "Semana 3": "S3",
+                            "Semana 4": "S4"
+                        }
+                        s_key = map_semanas[semana_a_borrar]
+                        for idx_c in df_filtrado.index:
+                            st.session_state["df_clientes"].loc[idx_c, [f"Visita_{s_key}", f"Pedido_{s_key}", f"Motivo_Pedido_{s_key}"]] = ""
+                        guardar_en_base_de_datos(st.session_state["df_clientes"])
+                        st.success(f"¡Información de la {semana_a_borrar} borrada con éxito para esta ruta!")
+                        st.rerun()
+                else:
+                    if st.button("⚠️ Confirmar Borrado de TODAS las Semanas", type="primary"):
+                        for idx_c in df_filtrado.index:
+                            for s_idx in [1, 2, 3, 4]:
+                                st.session_state["df_clientes"].loc[idx_c, [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]] = ""
+                        guardar_en_base_de_datos(st.session_state["df_clientes"])
+                        st.success("¡Historial completo de las 4 semanas borrado con éxito para esta ruta!")
+                        st.rerun()
+
             # Buscar cuáles clientes tienen la casilla "Ver Detalle" marcada
             clientes_seleccionados_checkbox = df_historial_editado[df_historial_editado["Ver Detalle"] == True]
 
@@ -742,7 +761,6 @@ with tab_ruta_vendedores:
                     nombre_cli = sel_row["Cliente"]
                     ubicacion_cli = sel_row["Ubicación"]
 
-                    # Encontrar los datos originales de este cliente en df_filtrado
                     match_orig = df_filtrado[(df_filtrado["Cliente"] == nombre_cli) & (df_filtrado["Ubicacion"] == ubicacion_cli)]
                     if not match_orig.empty:
                         c_data = match_orig.iloc[0]
