@@ -19,7 +19,7 @@ else:
   st.error("Error: La API Key de Gemini no está configurada en los Secrets de Streamlit.")
 
 # ==========================================
-# CONEXIÓN A SUPABASE (Soporte para variables planas y limpieza de URL)
+# CONEXIÓN A SUPABASE
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
@@ -35,7 +35,7 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ==========================================
-# GESTIÓN DE AUTENTICACIÓN (INICIAR SESIÓN / REGISTRARSE)
+# GESTIÓN DE AUTENTICACIÓN
 # ==========================================
 if "usuario" not in st.session_state:
     st.session_state["usuario"] = None
@@ -90,18 +90,6 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
-if "df_vendedores" not in st.session_state:
-  st.session_state["df_vendedores"] = pd.DataFrame([
-      {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 01"},
-      {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
-  ])
-
-if "df_mercaderistas" not in st.session_state:
-  st.session_state["df_mercaderistas"] = pd.DataFrame([
-      {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
-      {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
-  ])
-
 columnas_clientes = [
     "Nro",
     "Vendedor",
@@ -121,7 +109,47 @@ columnas_clientes = [
     "Día de Mercaderia Semana 2",
 ]
 
-# Cargar datos desde Supabase al iniciar (usando la tabla 'clientes_rutas')
+# Cargar Vendedores desde Supabase o usar valores por defecto
+if "df_vendedores" not in st.session_state:
+  if supabase:
+    try:
+      res_v = supabase.table("personal_rutas").select("*").eq("tipo", "vendedor").execute()
+      if res_v.data:
+        st.session_state["df_vendedores"] = pd.DataFrame(res_v.data)[["Vendedor", "Nro de Ruta"]]
+      else:
+        raise Exception()
+    except:
+      st.session_state["df_vendedores"] = pd.DataFrame([
+          {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 01"},
+          {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
+      ])
+  else:
+    st.session_state["df_vendedores"] = pd.DataFrame([
+        {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 01"},
+        {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
+    ])
+
+# Cargar Mercaderistas desde Supabase o usar valores por defecto
+if "df_mercaderistas" not in st.session_state:
+  if supabase:
+    try:
+      res_m = supabase.table("personal_rutas").select("*").eq("tipo", "mercaderista").execute()
+      if res_m.data:
+        st.session_state["df_mercaderistas"] = pd.DataFrame(res_m.data).rename(columns={"Vendedor": "Mercaderista"})[["Mercaderista", "Nro de Ruta"]]
+      else:
+        raise Exception()
+    except:
+      st.session_state["df_mercaderistas"] = pd.DataFrame([
+          {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
+          {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
+      ])
+  else:
+    st.session_state["df_mercaderistas"] = pd.DataFrame([
+        {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
+        {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
+    ])
+
+# Cargar Clientes desde Supabase al iniciar
 if "df_clientes" not in st.session_state:
   if supabase:
     try:
@@ -131,33 +159,43 @@ if "df_clientes" not in st.session_state:
         df_temp = pd.DataFrame(data_db)
         if "id" in df_temp.columns:
           df_temp = df_temp.drop(columns=["id"])
-
         for col in columnas_clientes:
           if col not in df_temp.columns:
             df_temp[col] = ""
         st.session_state["df_clientes"] = df_temp[columnas_clientes]
       else:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
-    except Exception as e:
-      st.warning(f"Aviso de carga desde Supabase: {e}")
+    except:
       st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
   else:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
-def guardar_en_supabase():
+def guardar_todo_en_supabase():
   if supabase:
     try:
-      df_to_save = st.session_state["df_clientes"].copy()
-      df_to_save = df_to_save.fillna("")
+      # Guardar Clientes
+      df_to_save = st.session_state["df_clientes"].copy().fillna("")
       df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
-      records = df_to_save.to_dict(orient="records")
-
       supabase.table("clientes_rutas").delete().neq("Nro", -999999).execute()
+      if not df_to_save.empty:
+        supabase.table("clientes_rutas").insert(df_to_save.to_dict(orient="records")).execute()
 
-      if records:
-        supabase.table("clientes_rutas").insert(records).execute()
+      # Guardar Vendedores y Mercaderistas en 'personal_rutas'
+      supabase.table("personal_rutas").delete().neq("id", -999999).execute()
+      
+      registros_personal = []
+      for _, row in st.session_state["df_vendedores"].dropna(subset=["Vendedor"]).iterrows():
+        if str(row["Vendedor"]).strip() != "":
+          registros_personal.append({"tipo": "vendedor", "Vendedor": str(row["Vendedor"]), "Nro de Ruta": str(row["Nro de Ruta"])})
+          
+      for _, row in st.session_state["df_mercaderistas"].dropna(subset=["Mercaderista"]).iterrows():
+        if str(row["Mercaderista"]).strip() != "":
+          registros_personal.append({"tipo": "mercaderista", "Vendedor": str(row["Mercaderista"]), "Nro de Ruta": str(row["Nro de Ruta"])})
 
-      st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
+      if registros_personal:
+        supabase.table("personal_rutas").insert(registros_personal).execute()
+
+      st.toast("¡Todo sincronizado con Supabase correctamente!", icon="☁️")
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
@@ -226,7 +264,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
         st.session_state["df_clientes"] = nuevo_df
-        guardar_en_supabase()
+        guardar_todo_en_supabase()
         st.success("¡Archivo Excel cargado y sincronizado en Supabase con éxito!")
       else:
         model = genai.GenerativeModel("gemini-2.5-flash")
@@ -249,7 +287,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             df_ia[col] = ""
 
         st.session_state["df_clientes"] = df_ia[columnas_clientes]
-        guardar_en_supabase()
+        guardar_todo_en_supabase()
         st.success("¡Datos del PDF extraídos y sincronizados en Supabase con éxito!")
     except Exception as e:
       st.error(f"Error al procesar el archivo: {e}")
@@ -260,7 +298,6 @@ col_vend, col_merc = st.columns(2)
 
 with col_vend:
   st.subheader("Gestión de Vendedores")
-  # Capturamos el resultado del editor en una variable temporal para evitar pérdida de foco inmediata
   edited_vendedores = st.data_editor(
       st.session_state["df_vendedores"],
       num_rows="dynamic",
@@ -277,11 +314,12 @@ with col_merc:
       key="editor_mercaderistas_inline",
   )
 
-# Botón único para consolidar los cambios en el session_state de Vendedores y Mercaderistas
 if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
   st.session_state["df_vendedores"] = edited_vendedores
   st.session_state["df_mercaderistas"] = edited_mercaderistas
-  st.success("¡Cambios de personal actualizados correctamente!")
+  guardar_todo_en_supabase()
+  st.success("¡Cambios de personal actualizados y guardados en la nube!")
+  st.rerun()
 
 st.markdown("---")
 st.subheader("Cuadro Maestro de Clientes")
@@ -350,7 +388,7 @@ edited_df = st.data_editor(
 st.session_state["df_clientes"] = edited_df
 
 if st.button("💾 Guardar Cambios en la Base de Datos", type="primary", use_container_width=True):
-  guardar_en_supabase()
+  guardar_todo_en_supabase()
 
 st.markdown("---")
 st.subheader("Opciones de Descarga del Cuadro Maestro")
