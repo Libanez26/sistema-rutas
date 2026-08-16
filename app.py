@@ -92,26 +92,25 @@ if "df_clientes" not in st.session_state:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
 # Función de guardado inteligente con Upsert (Preserva datos anteriores y actualiza sin borrar de más)
+# Función segura para guardar en Supabase (Borra e inserta todo el bloque actualizado)
 def guardar_en_supabase():
     if supabase:
         try:
             df_to_save = st.session_state["df_clientes"].copy()
             df_to_save = df_to_save.fillna("")
             
+            # Solo enviar filas que tengan al menos el nombre del cliente escrito
             df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
             
             records = df_to_save.to_dict(orient="records")
             
-            clean_records = []
-            for r in records:
-                clean_row = {k: r[k] for k in columnas_clientes if k in r}
-                clean_records.append(clean_row)
-
-            # Usamos upsert basado en la columna Nro para que persista y mantenga la info intacta
-            if clean_records:
-                supabase.table("clientes_ananke").upsert(clean_records, on_conflict="Nro").execute()
+            # Limpiar registros previos en la tabla y reinsertar los actuales
+            supabase.table("clientes_ananke").delete().neq("Nro", -999999).execute()
+            
+            if records:
+                supabase.table("clientes_ananke").insert(records).execute()
                 
-            st.toast("¡Información guardada y sincronizada correctamente!", icon="☁️")
+            st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
         except Exception as e:
             st.error(f"Error al guardar en Supabase: {e}")
 
