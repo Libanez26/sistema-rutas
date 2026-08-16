@@ -219,7 +219,7 @@ def guardar_en_base_de_datos(df):
       st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
-# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO ESPECÍFICA
+# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO ESPECÍFICA (CORREGIDA PARA TODOS LOS DÍAS)
 # Reglas personalizadas para Jueves y Viernes (cambio de semana):
 # - Jueves Semana 1 (48h) -> Lunes Semana 2
 # - Viernes Semana 1 (24h) -> Lunes Semana 2
@@ -259,9 +259,9 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
         if d_limpio in ["sábado", "domingo"]:
             continue
 
-        # Reglas especiales de cambio de semana solicitadas
         sig_semana = "Semana 2" if semana_actual == "Semana 1" else "Semana 1"
 
+        # Reglas especiales de cambio de semana solicitadas para Jueves y Viernes
         if d_limpio == "jueves":
             if saltos_habiles >= 2: # 48 horas
                 resultados_despacho.append(f"Lunes ({sig_semana})")
@@ -277,13 +277,15 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
         idx_actual = dias_habiles.index(d_limpio)
         idx_nuevo = idx_actual + saltos_habiles
         
+        # Si el salto se pasa del viernes, cae en la siguiente semana
         if idx_nuevo >= len(dias_habiles):
             idx_nuevo = idx_nuevo % len(dias_habiles)
             dia_nombre = dias_habiles[idx_nuevo].capitalize()
             resultados_despacho.append(f"{dia_nombre} ({sig_semana})")
         else:
             dia_nombre = dias_habiles[idx_nuevo].capitalize()
-            resultados_despacho.append(dia_nombre)
+            # IMPORTANTE: Mantener explícitamente la misma semana de referencia si se queda dentro de ella
+            resultados_despacho.append(f"{dia_nombre} ({semana_actual})")
 
     if not resultados_despacho:
         return "No asignado"
@@ -636,7 +638,7 @@ with tab_ruta_vendedores:
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         elif diferencia_dias > 10 and semana_seleccionada == semana_anterior_reg:
-            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y no avanzar?")
+            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y not avanzar?")
             if st.button("Sí, confirmar"):
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
@@ -943,13 +945,11 @@ with tab_ruta_despacho:
     if df_despachos.empty:
         st.info("No hay clientes registrados en la base de datos.")
     else:
-        # Se elimina el filtro de vendedor (dejando solo el selector de semana de referencia)
+        # Selector de semana de referencia (se eliminó el botón/selector de vendedor)
         semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
 
         datos_vista_despacho = []
 
-        # Recorremos cada cliente evaluando tanto su visita en Semana 1 como en Semana 2
-        # para determinar qué cae exactamente en la 'semana_filtro_esp' elegida.
         for _, r in df_despachos.iterrows():
             cliente_val = r.get("Cliente", "No aplica")
             ubicacion_val = r.get("Ubicacion", "No aplica")
@@ -961,7 +961,6 @@ with tab_ruta_despacho:
                 desp_s1 = calcular_despacho_por_dia_y_semana(dia_v_s1, "Semana 1", tiempo_desp)
                 sub_desps = [d.strip() for d in str(desp_s1).split(",")]
                 for d_item in sub_desps:
-                    # Verificamos si este despacho específico cae en la semana seleccionada por el usuario
                     if f"({semana_filtro_esp})" in d_item:
                         dia_limpio = d_item.split("(")[0].strip()
                         datos_vista_despacho.append({
