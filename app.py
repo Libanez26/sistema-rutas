@@ -19,15 +19,11 @@ else:
   st.error("Error: La API Key de Gemini no está configurada en los Secrets de Streamlit.")
 
 # ==========================================
-# CONEXIÓN A SUPABASE (Soporte flexible para formato plano o anidado)
+# CONEXIÓN A SUPABASE (Soporte para variables planas)
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
-  if "supabase" in st.secrets:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    return create_client(url, key)
-  elif "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+  if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
@@ -73,7 +69,7 @@ if st.session_state["usuario"] is None:
             if supabase:
                 try:
                     res = supabase.auth.sign_up({"email": correo_reg, "password": password_reg})
-                    st.success("¡Registro exitoso! Por favor verifica tu correo o inicia sesión.")
+                    st.success("¡Registro exitoso! Ya puedes iniciar sesión.")
                 except Exception as e:
                     st.error(f"Error al registrarse: {e}")
             else:
@@ -81,7 +77,6 @@ if st.session_state["usuario"] is None:
                 
     st.stop()
 else:
-    # Barra lateral para mostrar el usuario conectado y cerrar sesión
     st.sidebar.write(f"👤 Conectado como: **{st.session_state['usuario'].email}**")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["usuario"] = None
@@ -123,11 +118,11 @@ columnas_clientes = [
     "Día de Mercaderia Semana 2",
 ]
 
-# Cargar datos desde Supabase al iniciar
+# Cargar datos desde Supabase al iniciar (usando la tabla 'clientes_rutas')
 if "df_clientes" not in st.session_state:
   if supabase:
     try:
-      response = supabase.table("clientes").select("*").execute()
+      response = supabase.table("clientes_rutas").select("*").execute()
       data_db = response.data
       if data_db:
         df_temp = pd.DataFrame(data_db)
@@ -146,7 +141,6 @@ if "df_clientes" not in st.session_state:
   else:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
-
 def guardar_en_supabase():
   if supabase:
     try:
@@ -155,15 +149,14 @@ def guardar_en_supabase():
       df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
       records = df_to_save.to_dict(orient="records")
 
-      supabase.table("clientes").delete().neq("Nro", -999999).execute()
+      supabase.table("clientes_rutas").delete().neq("Nro", -999999).execute()
 
       if records:
-        supabase.table("clientes").insert(records).execute()
+        supabase.table("clientes_rutas").insert(records).execute()
 
       st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
-
 
 st.header("Base de Datos General de Clientes y Rutas")
 st.markdown("Sube tu archivo Excel de rutas para cargar toda la información completa de forma automática.")
