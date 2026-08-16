@@ -163,12 +163,21 @@ if "df_mercaderistas" not in st.session_state:
       st.session_state["df_mercaderistas"] = pd.DataFrame([
           {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
           {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
+          {"Mercaderista": "Armando", "Nro de Ruta": "Ruta M-03"},
       ])
   else:
     st.session_state["df_mercaderistas"] = pd.DataFrame([
         {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
         {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
+        {"Mercaderista": "Armando", "Nro de Ruta": "Ruta M-03"},
     ])
+
+# Diccionario de relación predeterminada (Vendedor -> Mercaderista por defecto)
+# Puedes ajustar esto según tus preferencias de asignación automática habituales.
+RELACION_VENDEDOR_MERCADERISTA = {
+    "Dairo Bello": {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta (Mercaderia)": "Ruta M-01"},
+    "Jhony Moreno": {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta (Mercaderia)": "Ruta M-01"},
+}
 
 if "df_clientes" not in st.session_state:
   if supabase:
@@ -424,11 +433,20 @@ with tab_general:
               if not match_v.empty:
                 df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
 
-            merc_actual = row.get("Mercaderista")
-            if pd.notna(merc_actual) and str(merc_actual).strip() != "":
-              match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual).strip()]
-              if not match_m.empty:
-                df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+              # Lógica inteligente: Autocompletar mercaderista por defecto según el vendedor, 
+              # a menos que el usuario haya seleccionado o cambiado manualmente otro mercaderista en la tabla.
+              merc_actual_fila = row.get("Mercaderista")
+              if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
+                if str(vendedor_actual).strip() in RELACION_VENDEDOR_MERCADERISTA:
+                  def_merc = RELACION_VENDEDOR_MERCADERISTA[str(vendedor_actual).strip()]
+                  df_actualizado.at[idx, "Mercaderista"] = def_merc["Mercaderista"]
+                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = def_merc["Nro de Ruta (Mercaderia)"]
+              else:
+                # Si ya hay un mercaderista asignado (ya sea por defecto o cambiado manualmente a Armando, etc.),
+                # aseguramos que su Nro de Ruta de Mercadería coincida con el de ese mercaderista específico.
+                match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
+                if not match_m.empty:
+                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
         st.session_state["df_clientes"] = df_actualizado
         guardar_en_base_de_datos(df_actualizado)
@@ -611,7 +629,6 @@ with tab_ruta_vendedores:
         
         col_dia_filtro = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
         
-        # Búsqueda flexible y robusta para días múltiples (ej. "Lunes, Jueves" o "Lunes y Jueves")
         def coincide_dia(texto_celda, dia_buscado):
             if pd.isna(texto_celda) or not texto_celda:
                 return False
