@@ -26,8 +26,8 @@ if "df_vendedores" not in st.session_state:
 
 if "df_mercaderistas" not in st.session_state:
     st.session_state["df_mercaderistas"] = pd.DataFrame([
-        {"Mercaderista": "Carlos Pérez", "Nro de Ruta": "Ruta M-01"},
-        {"Mercaderista": "Ana Gómez", "Nro de Ruta": "Ruta M-02"}
+        {"Mercaderista": "Jose Pire", "Nro de Ruta": "Ruta M-02"},
+        {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"}
     ])
 
 columnas_clientes = [
