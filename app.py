@@ -819,75 +819,123 @@ with tab_ruta_vendedores:
                             st.markdown("---")
 
             # ==========================================
-            # SECCIÓN DE DESCARGA DE RUTAS EN PDF
+            # SECCIÓN DE DESCARGA DE RUTAS EN PDF (DISEÑO POR CUADROS DÍA A DÍA)
             # ==========================================
             st.markdown("---")
-            st.subheader("📥 Descargar Reporte de Ruta")
+            st.subheader("📥 Descargar Reporte de Ruta (Formato de Cuadros por Día)")
             
             col_down1, col_down2 = st.columns(2)
             
-            def generar_pdf_vendedor(df_vende, titulo_reporte):
+            def generar_pdf_vendedor_cuadros(df_vende, titulo_reporte):
                 buffer = io.BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
+                doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
                 elements = []
 
                 styles = getSampleStyleSheet()
-                title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1f4e78"), spaceAfter=12, alignment=1)
+                title_style = ParagraphStyle(
+                    "TitleStyle", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1f4e78"), spaceAfter=10, alignment=1
+                )
+                subtitle_style = ParagraphStyle(
+                    "SubTitleStyle", parent=styles["Heading2"], fontSize=10, textColor=colors.HexColor("#2C5E3B"), spaceAfter=8, alignment=1, fontName="Helvetica-Bold"
+                )
+                cell_style = ParagraphStyle(
+                    "CellStyle", parent=styles["Normal"], fontSize=7, leading=9, alignment=0
+                )
+                header_style = ParagraphStyle(
+                    "HeaderStyle", parent=styles["Normal"], fontSize=7.5, leading=9, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1
+                )
+                sep_style = ParagraphStyle(
+                    "SepStyle", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.HexColor("#1f4e78"), fontName="Helvetica-Bold", alignment=1
+                )
 
                 elements.append(Paragraph(titulo_reporte, title_style))
                 elements.append(Spacer(1, 5))
 
-                cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=1)
-                header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], fontSize=6.5, leading=8, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
+                dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
-                data = []
-                cols_pdf = [c for c in ["Nro", "Cliente", "Ubicacion", "Nro de Ruta (Ventas)", "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2"] if c in df_vende.columns]
+                def construir_tabla_semana(df_origen, col_dia_semana, nombre_semana_label):
+                    elements.append(Paragraph(nombre_semana_label, subtitle_style))
+                    
+                    data_cols = []
+                    anchos_cols = []
+                    
+                    for dia in dias_semana:
+                        def match_d(texto):
+                            if pd.isna(texto) or not texto:
+                                return False
+                            t = str(texto).lower()
+                            d = dia.lower()
+                            return d in t or (d == "miércoles" and "miercoles" in t) or (d == "sábado" and "sabado" in t)
+                        
+                        df_dia = df_origen[df_origen[col_dia_semana].apply(match_d)]
+                        
+                        celda_contenido = []
+                        celda_contenido.append(Paragraph(f"<b>{dia.upper()}</b>", header_style))
+                        celda_contenido.append(Spacer(1, 3))
+                        
+                        if df_dia.empty:
+                            celda_contenido.append(Paragraph("<i>Sin clientes</i>", cell_style))
+                        else:
+                            for _, r_cli in df_dia.iterrows():
+                                cli_nombre = str(r_cli.get("Cliente", "Sin Nombre"))
+                                cli_ubicacion = str(r_cli.get("Ubicacion", "Sin Ubicación"))
+                                texto_cliente = f"<b>{cli_nombre}</b><br/>📍 {cli_ubicacion}"
+                                celda_contenido.append(Paragraph(texto_cliente, cell_style))
+                                celda_contenido.append(Spacer(1, 4))
+                                
+                        data_cols.append(celda_contenido)
+                        anchos_cols.append(752 / 5.0)
+
+                    tabla_semana = Table([data_cols], colWidths=anchos_cols)
+                    tabla_semana.setStyle(TableStyle([
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b0b0b0")),
+                        ("TOPPADDING", (0, 0), (-1, -1), 6),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f9f9f9")),
+                    ]))
+                    elements.append(tabla_semana)
+
+                # Semana 1
+                construir_tabla_semana(df_vende, "Día de Visita Semana 1", "--- SEMANA 1 ---")
                 
-                df_pdf = df_vende[cols_pdf].fillna("No aplica").replace(r"^\s*$", "No aplica", regex=True)
-
-                header_row = [Paragraph(str(col), header_style) for col in df_pdf.columns]
-                data.append(header_row)
-
-                for _, row in df_pdf.iterrows():
-                    row_data = [Paragraph(str(val), cell_style) for val in row.values]
-                    data.append(row_data)
-
-                ancho_total_disponible = 762
-                col_widths = [ancho_total_disponible / len(cols_pdf)] * len(cols_pdf)
-
-                table = Table(data, colWidths=col_widths, repeatRows=1)
-                table.setStyle(TableStyle([
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
-                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-                    ("TOPPADDING", (0, 0), (-1, 0), 5),
-                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                elements.append(Spacer(1, 10))
+                # Línea separadora visual clara entre Semana 1 y Semana 2
+                tabla_linea = Table([[""]], colWidths=[752], rowHeights=[2])
+                tabla_linea.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1f4e78")),
                 ]))
+                elements.append(tabla_linea)
+                elements.append(Spacer(1, 10))
 
-                elements.append(table)
+                # Semana 2
+                construir_tabla_semana(df_vende, "Día de Visita Semana 2", "--- SEMANA 2 ---")
+
                 doc.build(elements)
                 buffer.seek(0)
                 return buffer.getvalue()
 
             with col_down1:
-                pdf_vendedor_bytes = generar_pdf_vendedor(df_filtrado, f"Reporte de Ruta - Vendedor: {vendedor_seleccionado}")
+                pdf_vendedor_bytes = generar_pdf_vendedor_cuadros(df_filtrado, f"Ruta por Cuadros - Vendedor: {vendedor_seleccionado}")
                 st.download_button(
-                    label=f"📥 Descargar Ruta de {vendedor_seleccionado}",
+                    label=f"📥 Descargar Ruta de {vendedor_seleccionado} (Cuadros)",
                     data=pdf_vendedor_bytes,
-                    file_name=f"Ruta_{vendedor_seleccionado.replace(' ', '_')}.pdf",
+                    file_name=f"Ruta_Cuadros_{vendedor_seleccionado.replace(' ', '_')}.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
 
             with col_down2:
                 df_todos_vendedores = df_seguimiento[df_seguimiento["Vendedor"].astype(str).str.strip() != ""]
-                pdf_todos_bytes = generar_pdf_vendedor(df_todos_vendedores, "Reporte de Ruta - Todos los Vendedores")
+                pdf_todos_bytes = generar_pdf_vendedor_cuadros(df_todos_vendedores, "Ruta por Cuadros - Todos los Vendedores")
                 st.download_button(
-                    label="📥 Descargar Ruta de Todos",
+                    label="📥 Descargar Ruta de Todos (Cuadros)",
                     data=pdf_todos_bytes,
-                    file_name="Ruta_Todos_Los_Vendedores.pdf",
+                    file_name="Ruta_Cuadros_Todos_Los_Vendedores.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
