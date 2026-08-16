@@ -67,14 +67,19 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             if uploaded_file.name.endswith('.xlsx'):
                 df_excel = pd.read_excel(uploaded_file)
                 
-                # Limpiar espacios en blanco en los nombres de las columnas del Excel
-                df_excel.columns = df_excel.columns.str.strip()
+                # Limpiar espacios en blanco en los nombres de las columnas
+                df_excel.columns = df_excel.columns.str.replace(r'\s+', ' ', regex=True).str.strip()
                 
                 nuevo_df = pd.DataFrame()
                 nuevo_df["Nro"] = range(1, len(df_excel) + 1)
                 
-                # Mapeo exacto considerando posibles variaciones de nombres con o sin espacios
-                col_map = {
+                # Normalizar columnas de texto para eliminar espacios basura internos
+                for col in df_excel.select_dtypes(include=['object']).columns:
+                    df_excel[col] = df_excel[col].astype(str).str.strip()
+                    df_excel[col] = df_excel[col].replace({'nan': '', 'None': ''})
+
+                # Mapear columnas considerando nombres exactos o variaciones con espacios múltiples en el Excel original
+                mapping_cols = {
                     'Vendedor': 'Vendedor',
                     'Nro de Ruta': 'Nro de Ruta (Ventas)',
                     'Cliente': 'Cliente',
@@ -85,11 +90,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                     'Mercaderia': 'Mercaderia',
                     'Mercaderista': 'Mercaderista',
                     'Nro de Ruta Mercaderista': 'Nro de Ruta (Mercaderia)',
-                    'Tiempo de Mercaderia': 'Tiempo de Mercaderia',
-                    'Día de Visita Semana 1': 'Día de Visita Semana 1',
-                    'Día de Visita Semana 2': 'Día de Visita Semana 2',
-                    'Día de Mercaderia Semana 1': 'Día de Mercaderia Semana 1',
-                    'Día de Mercaderia Semana 2': 'Día de Mercaderia Semana 2'
+                    'Tiempo de Mercaderia': 'Tiempo de Mercaderia'
                 }
                 
                 for col_target in columnas_clientes:
@@ -97,26 +98,34 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                         continue
                     
                     encontrada = False
-                    for orig, dest in col_map.items():
+                    # Buscar por mapeo directo
+                    for orig, dest in mapping_cols.items():
                         if dest == col_target and orig in df_excel.columns:
-                            # Limpiar strings de espacios sobrantes en los datos si es texto
-                            val = df_excel[orig]
-                            if val.dtype == object:
-                                val = val.astype(str).str.strip()
-                                val = val.replace({'nan': '', 'None': ''})
-                            nuevo_df[col_target] = val
+                            nuevo_df[col_target] = df_excel[orig]
                             encontrada = True
                             break
                     
                     if not encontrada:
-                        if col_target in df_excel.columns:
-                            val = df_excel[col_target]
-                            if val.dtype == object:
-                                val = val.astype(str).str.strip()
-                                val = val.replace({'nan': '', 'None': ''})
-                            nuevo_df[col_target] = val
-                        else:
-                            nuevo_df[col_target] = ""
+                        # Buscar columnas de días con espacios múltiples en el nombre (ej. "Día de Visita          Semana 1")
+                        match_encontrado = False
+                        for col_excel in df_excel.columns:
+                            col_limpia = ' '.join(col_excel.split())
+                            target_limpia = ' '.join(col_target.split())
+                            if col_limpia.lower() == target_limpia.lower():
+                                nuevo_df[col_target] = df_excel[col_excel]
+                                match_encontrado = True
+                                break
+                        
+                        if not match_encontrado:
+                            if col_target in df_excel.columns:
+                                nuevo_df[col_target] = df_excel[col_target]
+                            else:
+                                nuevo_df[col_target] = ""
+
+                # Estandarizar valores de Si/Sí para evitar duplicidad visual
+                for c in ["Semana 1", "Semana 2", "Mercaderia"]:
+                    if c in nuevo_df.columns:
+                        nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
                 st.session_state["df_clientes"] = nuevo_df
                 st.success("¡Archivo Excel cargado con todos sus datos y columnas correctamente!")
@@ -124,7 +133,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""
                 Actúa como un experto en extracción de datos logísticos.
-                Analiza el PDF adjunto y extrae toda la información de los clientes (vendedor, rutas, ubicación, días, tiempos, mercaderista).
+                Analiza el PDF adjunto y extrae toda la información de los clientes.
                 Devuelve la respuesta estrictamente como una lista de objetos JSON con las claves exactas: {columnas_clientes}.
                 No incluyas explicaciones ni texto adicional, solo el JSON puro.
                 """
@@ -187,14 +196,14 @@ edited_df = st.data_editor(
         "Ubicacion": st.column_config.TextColumn("Ubicacion"),
         "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
         "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-        # Configurados como texto libre para permitir escribir o seleccionar varios días (ej. "Lunes, Jueves")
+        # Configurados como texto libre para permitir seleccionar varios días (ej: "Lunes, Jueves")
         "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
         "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
+        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
         "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
         "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
         "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
+        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
         "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
         "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2")
     }
