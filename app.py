@@ -497,6 +497,15 @@ with tab_general:
         buffer.seek(0)
         return buffer.getvalue()
 
+      pdf_data = generar_pdf(st.session_state["df_clientes"])
+      st.download_button(
+          label="📥 Descargar en Formato PDF",
+          data=pdf_data,
+          file_name="Cuadro_Maestro_Rutas.pdf",
+          mime="application/pdf",
+          use_container_width=True,
+      )
+
 with tab_ruta_vendedores:
     st.header("Seguimiento de Ruta de Vendedores")
     st.markdown("Filtra por vendedor, semana de trabajo y día de visita para gestionar el estatus con un historial rodante de 4 semanas.")
@@ -586,6 +595,7 @@ with tab_ruta_vendedores:
                         st.session_state["df_clientes"].at[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"]
                         st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"]
 
+                        st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] # wait let's use S2 -> S3 properly as originally written
                         st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S2"]
                         st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S2"]
                         st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S2"]
