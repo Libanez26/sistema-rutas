@@ -598,7 +598,6 @@ with tab_ruta_vendedores:
 
             df_view = df_filtrado[cols_a_mostrar].copy()
 
-            # Mapear valores de texto a Booleanos (True/False) para que aparezcan como casillas interactivas en la tabla
             for col_bool in ["Visita_S1", "Pedido_S1"]:
                 if col_bool in df_view.columns:
                     df_view[col_bool] = df_view[col_bool].apply(
@@ -638,7 +637,6 @@ with tab_ruta_vendedores:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
-                        # Convertir booleans de vuelta a "Sí" o "No" para mantener consistencia general
                         val_visita_str = "Sí" if row["Visita_S1"] else "No"
                         val_pedido_str = "Sí" if row["Pedido_S1"] else "No"
 
@@ -669,6 +667,96 @@ with tab_ruta_vendedores:
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
                     st.success("¡Datos de la Semana 1 limpiados con éxito!")
                     st.rerun()
+
+            st.markdown("---")
+            st.subheader("📸 Generar Imagen Compacta para Enviar al Vendedor")
+            st.markdown("Crea y descarga una tarjeta visual resumida (cliente, ubicación y estatus) ideal para tomar captura o enviar directo por mensajería.")
+
+            def generar_imagen_resumen_vendedor(df_f, vendedor_nom, dia_sel, semana_sel):
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=landscape(letter),
+                    rightMargin=20,
+                    leftMargin=20,
+                    topMargin=20,
+                    bottomMargin=20
+                )
+                elements = []
+                styles = getSampleStyleSheet()
+
+                header_title_style = ParagraphStyle(
+                    "HeaderTitle",
+                    parent=styles["Heading1"],
+                    fontSize=12,
+                    textColor=colors.HexColor("#1f4e78"),
+                    alignment=1,
+                    spaceAfter=4
+                )
+                sub_title_style = ParagraphStyle(
+                    "SubTitle",
+                    parent=styles["Normal"],
+                    fontSize=9,
+                    textColor=colors.HexColor("#444444"),
+                    alignment=1,
+                    spaceAfter=12
+                )
+
+                elements.append(Paragraph(f"REPORTE DE RUTA - {vendedor_nom.upper()}", header_title_style))
+                elements.append(Paragraph(f"Día: <b>{dia_sel}</b> | Período: <b>{semana_sel}</b>", sub_title_style))
+
+                cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
+                head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
+
+                table_data = [[
+                    Paragraph("Nro", head_s),
+                    Paragraph("Cliente", head_s),
+                    Paragraph("Ubicación", head_s),
+                    Paragraph("Ruta", head_s),
+                    Paragraph("Visita", head_s),
+                    Paragraph("Pedido", head_s),
+                    Paragraph("Motivo / Observación", head_s)
+                ]]
+
+                for _, r in df_f.iterrows():
+                    v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
+                    v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
+                    
+                    table_data.append([
+                        Paragraph(str(r.get("Nro", "")), cell_s),
+                        Paragraph(str(r.get("Cliente", "")), cell_s),
+                        Paragraph(str(r.get("Ubicacion", "")), cell_s),
+                        Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                        Paragraph(v_visita, cell_s),
+                        Paragraph(v_pedido, cell_s),
+                        Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                    ])
+
+                col_w = [35, 150, 130, 50, 50, 50, 260]
+                t = Table(table_data, colWidths=col_w, repeatRows=1)
+                t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]))
+
+                elements.append(t)
+                doc.build(elements)
+                buffer.seek(0)
+                return buffer.getvalue()
+
+            pdf_imagen_bytes = generar_imagen_resumen_vendedor(df_filtrado, vendedor_seleccionado, dia_seleccionado, semana_seleccionada)
+            st.download_button(
+                label="📥 Descargar Reporte en PDF (Ideal para Vista Limpia / Captura)",
+                data=pdf_imagen_bytes,
+                file_name=f"Reporte_Ruta_{vendedor_seleccionado}_{dia_seleccionado}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
 
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
@@ -773,7 +861,7 @@ with tab_ruta_vendedores:
                             detalle_semanas_rows = [
                                 {"Semana": "Semana 1 (Actual)", "Visita": c_data.get("Visita_S1", "No"), "Pedido": c_data.get("Pedido_S1", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S1", "Sin observaciones")},
                                 {"Semana": "Semana 2", "Visita": c_data.get("Visita_S2", "No"), "Pedido": c_data.get("Pedido_S2", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S2", "Sin observaciones")},
-                                {"Semana": "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
+                                {"Semana", "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
                                 {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
                             ]
                             
