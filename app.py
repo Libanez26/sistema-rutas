@@ -435,8 +435,10 @@ with tab_general:
             "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
         ]
         
-        # Filtrar el DataFrame para remover las columnas del historial
+        # Filtrar el DataFrame para remover las columnas del historial y rellenar celdas vacías con "No aplica"
         df_pdf = df.drop(columns=[col for col in columnas_a_excluir if col in df.columns], errors="ignore")
+        df_pdf = df_pdf.fillna("No aplica")
+        df_pdf = df_pdf.replace(r"^\s*$", "No aplica", regex=True)
 
         doc = SimpleDocTemplate(
             buffer, 
@@ -488,7 +490,7 @@ with tab_general:
             data.append(row_data)
 
         # Ancho total disponible en la hoja horizontal (letter landscape = 792 pt, menos márgenes 30 pt = 762 pt)
-        # Distribuimos el ancho total proporcionalmente entre las columnas de df_pdf
+        # Distribuimos el ancho total proporcionalmente entre las columnas de df_pdf para que abarque más de la hoja
         ancho_total_disponible = 762
         num_columnas = len(df_pdf.columns)
         col_widths = [ancho_total_disponible / num_columnas] * num_columnas
