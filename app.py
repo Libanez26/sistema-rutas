@@ -334,39 +334,30 @@ with tab_general:
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
     with st.form("form_cuadro_maestro"):
-      # Diccionario base con la configuración de las columnas visibles principales
-      column_config_dict = {
-          "Nro": st.column_config.NumberColumn("Nro", required=True),
-          "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-          "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
-          "Cliente": st.column_config.TextColumn("Cliente", required=True),
-          "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-          "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-          "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-          "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-          "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-          "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-          "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-          "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
-          "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-          "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-          "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-          "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-      }
-
-      # Ocultar automáticamente las columnas de seguimiento histórico en el cuadro maestro principal
-      for s_idx in [1, 2, 3, 4]:
-        for prefix in ["Visita_S", "Pedido_S", "Motivo_Pedido_S"]:
-          col_name = f"{prefix}{s_idx}"
-          column_config_dict[col_name] = st.column_config.TextColumn(col_name, disabled=True, hidden=True)
-
       edited_df = st.data_editor(
           st.session_state["df_clientes"],
           num_rows="dynamic",
           use_container_width=True,
           key="editor_clientes",
           hide_index=True,
-          column_config=column_config_dict,
+          column_config={
+              "Nro": st.column_config.NumberColumn("Nro", required=True),
+              "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+              "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
+              "Cliente": st.column_config.TextColumn("Cliente", required=True),
+              "Ubicacion": st.column_config.TextColumn("Ubicacion"),
+              "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+              "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
+              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+              "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+              "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+              "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+          },
       )
 
       submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
@@ -438,8 +429,11 @@ with tab_general:
         ]
         
         df_pdf = df.drop(columns=[col for col in columnas_a_excluir if col in df.columns], errors="ignore")
+        
+        # Reemplazar valores nulos, None o cadenas vacías por "No aplica" en todo el DataFrame del PDF
         df_pdf = df_pdf.fillna("No aplica")
         df_pdf = df_pdf.replace(r"^\s*$", "No aplica", regex=True)
+        df_pdf = df_pdf.replace({None: "No aplica", "None": "No aplica", "nan": "No aplica", "NaN": "No aplica"})
 
         doc = SimpleDocTemplate(
             buffer, 
@@ -748,27 +742,33 @@ with tab_ruta_vendedores:
                     v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
                     v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
                     dia_visita_val = str(r.get(col_dia_filtro, ""))
+                    if not dia_visita_val or dia_visita_val.lower() in ["nan", "none", ""]:
+                        dia_visita_val = "No aplica"
+
+                    motivo_val = str(r.get("Motivo_Pedido_S1", ""))
+                    if not motivo_val or motivo_val.lower() in ["nan", "none", ""]:
+                        motivo_val = "No aplica"
                     
                     if es_toda_la_semana:
                         table_data.append([
-                            Paragraph(str(r.get("Nro", "")), cell_s),
-                            Paragraph(str(r.get("Cliente", "")), cell_s),
-                            Paragraph(str(r.get("Ubicacion", "")), cell_s),
-                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                            Paragraph(str(r.get("Nro", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
                             Paragraph(dia_visita_val, cell_s),
                             Paragraph(v_visita, cell_s),
                             Paragraph(v_pedido, cell_s),
-                            Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                            Paragraph(motivo_val, cell_s)
                         ])
                     else:
                         table_data.append([
-                            Paragraph(str(r.get("Nro", "")), cell_s),
-                            Paragraph(str(r.get("Cliente", "")), cell_s),
-                            Paragraph(str(r.get("Ubicacion", "")), cell_s),
-                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                            Paragraph(str(r.get("Nro", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
+                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
                             Paragraph(v_visita, cell_s),
                             Paragraph(v_pedido, cell_s),
-                            Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                            Paragraph(motivo_val, cell_s)
                         ])
 
                 if es_toda_la_semana:
@@ -858,14 +858,18 @@ with tab_ruta_vendedores:
                             v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
                             v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
                             
+                            motivo_val = str(r.get("Motivo_Pedido_S1", ""))
+                            if not motivo_val or motivo_val.lower() in ["nan", "none", ""]:
+                                motivo_val = "No aplica"
+
                             table_data.append([
-                                Paragraph(str(r.get("Nro", "")), cell_s),
-                                Paragraph(str(r.get("Cliente", "")), cell_s),
-                                Paragraph(str(r.get("Ubicacion", "")), cell_s),
-                                Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                                Paragraph(str(r.get("Nro", "No aplica")), cell_s),
+                                Paragraph(str(r.get("Cliente", "No aplica")), cell_s),
+                                Paragraph(str(r.get("Ubicacion", "No aplica")), cell_s),
+                                Paragraph(str(r.get("Nro de Ruta (Ventas)", "No aplica")), cell_s),
                                 Paragraph(v_visita, cell_s),
                                 Paragraph(v_pedido, cell_s),
-                                Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                                Paragraph(motivo_val, cell_s)
                             ])
 
                         col_w = [35, 150, 130, 50, 50, 50, 260]
@@ -918,19 +922,20 @@ with tab_ruta_vendedores:
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
                     "Ver Detalle": False,
-                    "Cliente": row_h.get("Cliente", ""),
-                    "Ubicación": row_h.get("Ubicacion", ""),
-                    "Visita S1": row_h.get("Visita_S1", "No") or "No",
-                    "Pedido S1": row_h.get("Pedido_S1", "No") or "No",
-                    "Visita S2": row_h.get("Visita_S2", "No") or "No",
-                    "Pedido S2": row_h.get("Pedido_S2", "No") or "No",
-                    "Visita S3": row_h.get("Visita_S3", "No") or "No",
-                    "Pedido S3": row_h.get("Pedido_S3", "No") or "No",
-                    "Visita S4": row_h.get("Visita_S4", "No") or "No",
-                    "Pedido S4": row_h.get("Pedido_S4", "No") or "No",
+                    "Cliente": row_h.get("Cliente", "No aplica") or "No aplica",
+                    "Ubicación": row_h.get("Ubicacion", "No aplica") or "No aplica",
+                    "Visita S1": row_h.get("Visita_S1", "No aplica") or "No aplica",
+                    "Pedido S1": row_h.get("Pedido_S1", "No aplica") or "No aplica",
+                    "Visita S2": row_h.get("Visita_S2", "No aplica") or "No aplica",
+                    "Pedido S2": row_h.get("Pedido_S2", "No aplica") or "No aplica",
+                    "Visita S3": row_h.get("Visita_S3", "No aplica") or "No aplica",
+                    "Pedido S3": row_h.get("Pedido_S3", "No aplica") or "No aplica",
+                    "Visita S4": row_h.get("Visita_S4", "No aplica") or "No aplica",
+                    "Pedido S4": row_h.get("Pedido_S4", "No aplica") or "No aplica",
                 })
 
             df_tabla_historial = pd.DataFrame(tabla_historial_data)
+            df_tabla_historial = df_tabla_historial.fillna("No aplica").replace(r"^\s*$", "No aplica", regex=True)
             
             df_historial_editado = st.data_editor(
                 df_tabla_historial,
@@ -1000,7 +1005,9 @@ with tab_ruta_vendedores:
                     match_orig = df_filtrado[(df_filtrado["Cliente"] == nombre_cli) & (df_filtrado["Ubicacion"] == ubicacion_cli)]
                     if not match_orig.empty:
                         c_data = match_orig.iloc[0]
-                        ruta_cli = c_data.get("Nro de Ruta (Ventas)", "Sin ruta")
+                        ruta_cli = c_data.get("Nro de Ruta (Ventas)", "No aplica")
+                        if not ruta_cli or str(ruta_cli).lower() in ["nan", "none", ""]:
+                            ruta_cli = "No aplica"
 
                         with st.container():
                             st.markdown(f"#### 🏢 Cliente: **{nombre_cli}**")
@@ -1010,14 +1017,20 @@ with tab_ruta_vendedores:
                             with col_info2:
                                 st.markdown(f"🚚 **Nro de Ruta:** {ruta_cli}")
 
+                            def limpiar_val(val, default="No aplica"):
+                                if pd.isna(val) or str(val).strip() in ["", "nan", "None", "none"]:
+                                    return default
+                                return str(val)
+
                             detalle_semanas_rows = [
-                                {"Semana": "Semana 1 (Actual)", "Visita": c_data.get("Visita_S1", "No"), "Pedido": c_data.get("Pedido_S1", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S1", "Sin observaciones")},
-                                {"Semana": "Semana 2", "Visita": c_data.get("Visita_S2", "No"), "Pedido": c_data.get("Pedido_S2", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S2", "Sin observaciones")},
-                                {"Semana": "Semana 3", "Visita": c_data.get("Semana 3", "No") if "Visita_S3" not in c_data else c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
-                                {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Responsable": "", "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
+                                {"Semana": "Semana 1 (Actual)", "Visita": limpiar_val(c_data.get("Visita_S1"), "No"), "Pedido": limpiar_val(c_data.get("Pedido_S1"), "No"), "Motivo / Observación": limpiar_val(c_data.get("Motivo_Pedido_S1"), "No aplica")},
+                                {"Semana": "Semana 2", "Visita": limpiar_val(c_data.get("Visita_S2"), "No"), "Pedido": limpiar_val(c_data.get("Pedido_S2"), "No"), "Motivo / Observación": limpiar_val(c_data.get("Motivo_Pedido_S2"), "No aplica")},
+                                {"Semana": "Semana 3", "Visita": limpiar_val(c_data.get("Visita_S3"), "No"), "Pedido": limpiar_val(c_data.get("Pedido_S3"), "No"), "Motivo / Observación": limpiar_val(c_data.get("Motivo_Pedido_S3"), "No aplica")},
+                                {"Semana": "Semana 4", "Visita": limpiar_val(c_data.get("Visita_S4"), "No"), "Pedido": limpiar_val(c_data.get("Pedido_S4"), "No"), "Motivo / Observación": limpiar_val(c_data.get("Motivo_Pedido_S4"), "No aplica")},
                             ]
                             
                             df_detalle_cliente = pd.DataFrame(detalle_semanas_rows)
+                            df_detalle_cliente = df_detalle_cliente.fillna("No aplica").replace(r"^\s*$", "No aplica", regex=True)
                             
                             st.dataframe(
                                 df_detalle_cliente,
