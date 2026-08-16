@@ -596,7 +596,6 @@ with tab_ruta_vendedores:
             for sem_nombre, col_dia_campo in [("SEMANA 1", "Día de Visita Semana 1"), ("SEMANA 2", "Día de Visita Semana 2")]:
                 elements.append(Paragraph(f"{sem_nombre}", section_style))
                 
-                # Armar matriz por columnas (Lunes a Viernes)
                 matriz_dias = {dia: [] for dia in dias_semana}
                 
                 for _, r_row in df_vend_subset.iterrows():
@@ -621,8 +620,6 @@ with tab_ruta_vendedores:
                         fila_cells.append(Paragraph(val_txt, cell_style))
                     tabla_data.append(fila_cells)
 
-                # Ancho total disponible en landscape letter = 762 pt
-                col_w = 762 / 6
                 t = Table(tabla_data, colWidths=[22] + [(762 - 22) / 5] * 5, repeatRows=1)
                 t.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
@@ -798,6 +795,19 @@ with tab_ruta_vendedores:
                     "Pedido S4": st.column_config.TextColumn("Pedido S4"),
                 }
             )
+
+            # Botón de borrar historial para el vendedor filtrado
+            if st.button("🗑️ Borrar Historial de las 4 Semanas (Clientes Filtrados)", type="secondary"):
+                for idx, _ in df_filtrado.iterrows():
+                    st.session_state["df_clientes"].loc[idx, [
+                        "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
+                        "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
+                        "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
+                        "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4"
+                    ]] = ""
+                guardar_en_base_de_datos(st.session_state["df_clientes"])
+                st.success("¡Historial de las 4 semanas borrado con éxito para este vendedor!")
+                st.rerun()
 
             clientes_seleccionados_checkbox = df_historial_editado[df_historial_editado["Ver Detalle"] == True]
 
