@@ -292,11 +292,6 @@ with tab_general:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
-            # Normalizar días de la semana automáticamente
-            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
-              if col_dia in nuevo_df.columns:
-                nuevo_df[col_dia] = nuevo_df[col_dia].apply(normalizar_dia)
-
             st.session_state["df_clientes"] = nuevo_df
             st.success("¡Archivo Excel cargado con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlo a la base de datos.")
           else:
@@ -318,10 +313,6 @@ with tab_general:
             for col in columnas_clientes:
               if col not in df_ia.columns:
                 df_ia[col] = ""
-            
-            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
-              if col_dia in df_ia.columns:
-                df_ia[col_dia] = df_ia[col_dia].apply(normalizar_dia)
 
             st.session_state["df_clientes"] = df_ia[columnas_clientes]
             st.success("¡Datos del PDF extraídos con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlos a la base de datos.")
@@ -364,7 +355,6 @@ with tab_general:
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-    # Ocultar las columnas operativas (Visita_S4, etc.) en el editor general para que no aparezcan molestando
     columnas_excluir_vista_general = [
         "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
         "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
@@ -390,15 +380,15 @@ with tab_general:
               "Ubicacion": st.column_config.TextColumn("Ubicacion"),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Día de Visita Semana 1": st.column_config.SelectboxColumn("Día Visita S1", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
-              "Día de Visita Semana 2": st.column_config.SelectboxColumn("Día Visita S2", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
+              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1 (Ej: Lunes, Jueves)"),
+              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2 (Ej: Lunes, Jueves)"),
               "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
               "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
               "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-              "Día de Mercaderia Semana 1": st.column_config.SelectboxColumn("Día Merc. S1", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
-              "Día de Mercaderia Semana 2": st.column_config.SelectboxColumn("Día Merc. S2", options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]),
+              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
           },
       )
 
@@ -407,7 +397,6 @@ with tab_general:
       if submitted:
         df_actualizado = st.session_state["df_clientes"].copy()
         
-        # Actualizar los campos editados preservando las columnas ocultas de historial
         for col in edited_df_visible.columns:
           df_actualizado[col] = edited_df_visible[col]
 
@@ -429,19 +418,12 @@ with tab_general:
           df_m = st.session_state["df_mercaderistas"]
 
           for idx, row in df_actualizado.iterrows():
-            # Normalizar días en la persistencia
-            for col_dia in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
-              if col_dia in df_actualizado.columns:
-                df_actualizado.at[idx, col_dia] = normalizar_dia(row.get(col_dia))
-
-            # Re-vincular ruta de vendedor
             vendedor_actual = row.get("Vendedor")
             if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
               match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
               if not match_v.empty:
                 df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
 
-            # Re-vincular ruta de mercaderista
             merc_actual = row.get("Mercaderista")
             if pd.notna(merc_actual) and str(merc_actual).strip() != "":
               match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual).strip()]
@@ -628,8 +610,16 @@ with tab_ruta_vendedores:
         mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
         
         col_dia_filtro = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
-        # Búsqueda robusta de día normalizado
-        mask_dia = df_seguimiento[col_dia_filtro].apply(lambda x: normalizar_dia(x)) == normalizar_dia(dia_seleccionado)
+        
+        # Búsqueda flexible y robusta para días múltiples (ej. "Lunes, Jueves" o "Lunes y Jueves")
+        def coincide_dia(texto_celda, dia_buscado):
+            if pd.isna(texto_celda) or not texto_celda:
+                return False
+            celda_limpia = str(texto_celda).lower()
+            dia_limpio = str(dia_buscado).lower()
+            return dia_limpio in celda_limpia or (dia_limpio == "miercoles" and "miércoles" in celda_limpia) or (dia_limpio == "sabado" and "sábado" in celda_limpia)
+
+        mask_dia = df_seguimiento[col_dia_filtro].apply(lambda x: coincide_dia(x, dia_seleccionado))
         
         df_filtrado = df_seguimiento[mask_vendedor & mask_dia].copy()
 
