@@ -547,15 +547,16 @@ with tab_ruta_vendedores:
         else:
             st.success(f"Se encontraron **{len(df_filtrado)}** clientes para esta ruta.")
 
-            # Columnas operativas a mostrar en la vista
+            # Incluimos el historial de las 4 semanas para que se despliegue en la vista
             cols_a_mostrar = [
                 "Nro",
                 "Cliente",
                 "Ubicacion",
                 "Nro de Ruta (Ventas)",
-                "Visita_S1",
-                "Pedido_S1",
-                "Motivo_Pedido_S1"
+                "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
+                "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
+                "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
+                "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1"
             ]
             
             for c in cols_a_mostrar:
@@ -570,22 +571,34 @@ with tab_ruta_vendedores:
                     use_container_width=True,
                     num_rows="fixed",
                     key="editor_ruta_vendedores",
-                    hide_index=True, # Oculta la columna redundante de la izquierda
+                    hide_index=True,
                     column_config={
                         "Nro": st.column_config.NumberColumn("Nro", disabled=True),
                         "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
                         "Ubicacion": st.column_config.TextColumn("Ubicación", disabled=True),
                         "Nro de Ruta (Ventas)": st.column_config.TextColumn("Ruta", disabled=True),
-                        "Visita_S1": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"], required=True),
-                        "Pedido_S1": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"], required=True),
-                        "Motivo_Pedido_S1": st.column_config.TextColumn("Motivo / Observación (si aplica)"),
+                        # S4 (Más antigua)
+                        "Visita_S4": st.column_config.SelectboxColumn("Visita S4", options=["Sí", "No"]),
+                        "Pedido_S4": st.column_config.SelectboxColumn("Pedido S4", options=["Sí", "No"]),
+                        "Motivo_Pedido_S4": st.column_config.TextColumn("Motivo S4"),
+                        # S3
+                        "Visita_S3": st.column_config.SelectboxColumn("Visita S3", options=["Sí", "No"]),
+                        "Pedido_S3": st.column_config.SelectboxColumn("Pedido S3", options=["Sí", "No"]),
+                        "Motivo_Pedido_S3": st.column_config.TextColumn("Motivo S3"),
+                        # S2
+                        "Visita_S2": st.column_config.SelectboxColumn("Visita S2", options=["Sí", "No"]),
+                        "Pedido_S2": st.column_config.SelectboxColumn("Pedido S2", options=["Sí", "No"]),
+                        "Motivo_Pedido_S2": st.column_config.TextColumn("Motivo S2"),
+                        # S1 (Actual / Editable)
+                        "Visita_S1": st.column_config.SelectboxColumn("Visita S1 (Actual)", options=["Sí", "No"], required=True),
+                        "Pedido_S1": st.column_config.SelectboxColumn("Pedido S1 (Actual)", options=["Sí", "No"], required=True),
+                        "Motivo_Pedido_S1": st.column_config.TextColumn("Motivo S1 (Actual)"),
                     }
                 )
 
                 guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial (4 Semanas)", type="primary", use_container_width=True)
 
                 if guardar_ruta_btn:
-                    # Asegurar primero que todas las columnas de historial existan en el DataFrame principal
                     for s_idx in [1, 2, 3, 4]:
                         for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
                             if c_field not in st.session_state["df_clientes"].columns:
@@ -594,7 +607,7 @@ with tab_ruta_vendedores:
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
-                        # APLICANDO LÓGICA DE ROTACIÓN DE 4 SEMANAS (FIFO):
+                        # Rotación FIFO de 4 semanas
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
@@ -607,7 +620,7 @@ with tab_ruta_vendedores:
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
-                        # Guardar los datos ingresados actualmente en S1
+                        # Guardar los datos ingresados en S1
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
