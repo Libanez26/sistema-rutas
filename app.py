@@ -861,3 +861,77 @@ with tab_ruta_vendedores:
                                 }
                             )
                             st.markdown("---")
+
+                      # ==========================================
+# PESTAÑA: RUTA DE DESPACHO (SOLO VISUAL)
+# ==========================================
+with tab_ruta_despacho:
+    st.header("📦 Visualización de Ruta de Despacho")
+    st.markdown("Consulta rápida de clientes, ubicación, días de visita (Semana 1 y Semana 2) y el **Día de Despacho** calculado automáticamente según el tiempo de respuesta (24 o 48 horas).")
+
+    df_despachos = st.session_state["df_clientes"].copy()
+    
+    if df_despachos.empty:
+        st.info("No hay clientes registrados en la base de datos.")
+    else:
+        # Filtros opcionales para facilitar la búsqueda visual
+        col_filtro_v, col_filtro_sem = st.columns(2)
+        vendedores_opciones = ["Todos"] + sorted(list(set(df_despachos["Vendedor"].dropna().astype(str)) - {"_"}))
+        
+        with col_filtro_v:
+            vendedor_filtro_esp = st.selectbox("Filtrar por Vendedor", vendedores_opciones, key="filtro_vendedor_despacho")
+        with col_filtro_sem:
+            semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
+
+        if vendedor_filtro_esp != "Todos":
+            df_despachos = df_despachos[df_despachos["Vendedor"].astype(str).str.strip() == vendedor_filtro_esp.strip()]
+
+        # Preparar columnas visuales para la tabla de despacho
+        datos_vista_despacho = []
+        col_visita_seleccionada = "Día de Visita Semana 1" if semana_filtro_esp == "Semana 1" else "Día de Visita Semana 2"
+
+        for _, r in df_despachos.iterrows():
+            cliente_val = r.get("Cliente", "No aplica")
+            ubicacion_val = r.get("Ubicacion", "No aplica")
+            vendedor_val = r.get("Vendedor", "No aplica")
+            ruta_val = r.get("Nro de Ruta (Ventas)", "No aplica")
+            
+            dia_visita_s1 = r.get("Día de Visita Semana 1", "")
+            dia_visita_s2 = r.get("Día de Visita Semana 2", "")
+            tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
+            
+            # Calcular días de despacho correspondientes
+            dia_desp_s1 = calcular_dia_despacho(dia_visita_s1, tiempo_desp)
+            dia_desp_s2 = calcular_dia_despacho(dia_visita_s2, tiempo_desp)
+            
+            datos_vista_despacho.append({
+                "Cliente": cliente_val if pd.notna(cliente_val) and str(cliente_val).strip() != "" else "No aplica",
+                "Ubicación": ubicacion_val if pd.notna(ubicacion_val) and str(ubicacion_val).strip() != "" else "No aplica",
+                "Vendedor": vendedor_val if pd.notna(vendedor_val) and str(vendedor_val).strip() != "" else "No aplica",
+                "Ruta": ruta_val if pd.notna(ruta_val) and str(ruta_val).strip() != "" else "No aplica",
+                "Día Visita S1": dia_visita_s1 if pd.notna(dia_visita_s1) and str(dia_visita_s1).strip() != "" else "No asignado",
+                "Día Despacho S1": dia_desp_s1,
+                "Día Visita S2": dia_visita_s2 if pd.notna(dia_visita_s2) and str(dia_visita_s2).strip() != "" else "No asignado",
+                "Día Despacho S2": dia_desp_s2,
+                "Tiempo de Despacho": tiempo_desp if pd.notna(tiempo_desp) and str(tiempo_desp).strip() != "" else "24 HORAS"
+            })
+
+        df_tabla_despacho_final = pd.DataFrame(datos_vista_despacho)
+
+        # Mostrar tabla interactiva (Solo lectura / Visual)
+        st.dataframe(
+            df_tabla_despacho_final,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
+                "Ubicación": st.column_config.TextColumn("Ubicación", width="medium"),
+                "Vendedor": st.column_config.TextColumn("Vendedor", width="small"),
+                "Ruta": st.column_config.TextColumn("Ruta", width="small"),
+                "Día Visita S1": st.column_config.TextColumn("Visita S1", width="small"),
+                "Día Despacho S1": st.column_config.TextColumn("🚀 Despacho S1", width="small"),
+                "Día Visita S2": st.column_config.TextColumn("Visita S2", width="small"),
+                "Día Despacho S2": st.column_config.TextColumn("🚀 Despacho S2", width="small"),
+                "Tiempo de Despacho": st.column_config.TextColumn("Plazo", width="small"),
+            }
+        )
