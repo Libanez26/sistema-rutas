@@ -218,7 +218,39 @@ def guardar_en_base_de_datos(df):
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
-tab_general, tab_ruta_vendedores = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores"])
+# Función para calcular el día de despacho
+def calcular_dia_despacho(dia_visita, tiempo_despacho):
+    if not dia_visita or pd.isna(dia_visita):
+        return "No asignado"
+    
+    dias_orden = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    dia_limpio = str(dia_visita).strip().lower()
+    
+    # Normalizar tildes comunes
+    if dia_limpio == "miercoles":
+        dia_limpio = "miércoles"
+    elif dia_limpio == "sabado":
+        dia_limpio = "sábado"
+        
+    if dia_limpio not in dias_orden:
+        return str(dia_visita)
+        
+    idx_actual = dias_orden.index(dia_limpio)
+    tiempo_limpio = str(tiempo_despacho).strip().upper()
+    
+    # Determinar salto de días
+    if "24" in tiempo_limpio:
+        saltos = 1
+    elif "48" in tiempo_limpio:
+        saltos = 2
+    else:
+        saltos = 1 # Por defecto si no especifica
+        
+    idx_nuevo = (idx_actual + saltos) % len(dias_orden)
+    return dias_orden[idx_nuevo].capitalize()
+
+# Pestañas de la aplicación (incluyendo "Ruta de Despacho")
+tab_general, tab_ruta_vendedores, tab_ruta_despacho = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores", "📦 Ruta de Despacho"])
 
 with tab_general:
     st.header("Base de Datos General de Clientes y Rutas")
@@ -563,7 +595,7 @@ with tab_ruta_vendedores:
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         elif diferencia_dias > 10 and semana_seleccionada == semana_anterior_reg:
-            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y no avanzar?")
+            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y não avanzar?")
             if st.button("Sí, confirmar"):
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
@@ -862,7 +894,7 @@ with tab_ruta_vendedores:
                             )
                             st.markdown("---")
 
-                      # ==========================================
+# ==========================================
 # PESTAÑA: RUTA DE DESPACHO (SOLO VISUAL)
 # ==========================================
 with tab_ruta_despacho:
