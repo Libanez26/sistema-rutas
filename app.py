@@ -633,20 +633,24 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
-            # SECCIÓN INFERIOR: Historial limpio y Detalle por cliente
+            # SECCIÓN INFERIOR: Historial limpio y Detalle por cliente (Celdas separadas por semana)
             st.markdown("---")
-            st.subheader("📋 Historial de Visitas y Motivos de Pedido (Últimas 4 Semanas)")
-            st.markdown("Resumen general con la ubicación del cliente y desglose detallado por semana:")
+            st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
+            st.markdown("Resumen general con desglose individual de visitas y pedidos por semana:")
 
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
                     "Cliente": row_h.get("Cliente", ""),
                     "Ubicación": row_h.get("Ubicacion", ""),
-                    "S1 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S1', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S1', 'No') or 'No'}",
-                    "S2 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S2', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S2', 'No') or 'No'}",
-                    "S3 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S3', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S3', 'No') or 'No'}",
-                    "S4 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S4', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S4', 'No') or 'No'}",
+                    "Visita S1": row_h.get("Visita_S1", "No") or "No",
+                    "Pedido S1": row_h.get("Pedido_S1", "No") or "No",
+                    "Visita S2": row_h.get("Visita_S2", "No") or "No",
+                    "Pedido S2": row_h.get("Pedido_S2", "No") or "No",
+                    "Visita S3": row_h.get("Visita_S3", "No") or "No",
+                    "Pedido S3": row_h.get("Pedido_S3", "No") or "No",
+                    "Visita S4": row_h.get("Visita_S4", "No") or "No",
+                    "Pedido S4": row_h.get("Pedido_S4", "No") or "No",
                 })
 
             df_tabla_historial = pd.DataFrame(tabla_historial_data)
@@ -658,10 +662,14 @@ with tab_ruta_vendedores:
                 column_config={
                     "Cliente": st.column_config.TextColumn("Cliente"),
                     "Ubicación": st.column_config.TextColumn("Ubicación"),
-                    "S1 (Visita | Pedido)": st.column_config.TextColumn("S1"),
-                    "S2 (Visita | Pedido)": st.column_config.TextColumn("S2"),
-                    "S3 (Visita | Pedido)": st.column_config.TextColumn("S3"),
-                    "S4 (Visita | Pedido)": st.column_config.TextColumn("S4"),
+                    "Visita S1": st.column_config.TextColumn("Visita S1"),
+                    "Pedido S1": st.column_config.TextColumn("Pedido S1"),
+                    "Visita S2": st.column_config.TextColumn("Visita S2"),
+                    "Pedido S2": st.column_config.TextColumn("Pedido S2"),
+                    "Visita S3": st.column_config.TextColumn("Visita S3"),
+                    "Pedido S3": st.column_config.TextColumn("Pedido S3"),
+                    "Visita S4": st.column_config.TextColumn("Visita S4"),
+                    "Pedido S4": st.column_config.TextColumn("Pedido S4"),
                 }
             )
 
