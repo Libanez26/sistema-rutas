@@ -30,7 +30,6 @@ if "df_mercaderistas" not in st.session_state:
         {"Mercaderista": "Ana Gómez", "Nro de Ruta": "Ruta M-02"}
     ])
 
-# Columnas exactas sincronizadas con tu esquema
 columnas_clientes = [
     "Nro",
     "Vendedor",
@@ -66,45 +65,56 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
     with st.spinner("Leyendo documento y estructurando todos los datos..."):
         try:
             if uploaded_file.name.endswith('.xlsx'):
-                # Leemos directamente todas las columnas del Excel
                 df_excel = pd.read_excel(uploaded_file)
                 
-                # Mapeo inteligente para asegurarnos que cada columna del Excel caiga en su lugar exacto
+                # Limpiar espacios en blanco en los nombres de las columnas del Excel
+                df_excel.columns = df_excel.columns.str.strip()
+                
                 nuevo_df = pd.DataFrame()
                 nuevo_df["Nro"] = range(1, len(df_excel) + 1)
                 
-                # Buscamos columnas parecidas en el Excel subido o dejamos vacío si no están
+                # Mapeo exacto considerando posibles variaciones de nombres con o sin espacios
                 col_map = {
                     'Vendedor': 'Vendedor',
                     'Nro de Ruta': 'Nro de Ruta (Ventas)',
                     'Cliente': 'Cliente',
-                    'Ubicacion ': 'Ubicacion',
                     'Ubicacion': 'Ubicacion',
                     'Semana 1': 'Semana 1',
                     'Semana 2': 'Semana 2',
                     'Tiempo de Despacho': 'Tiempo de Despacho',
-                    'Mercaderia ': 'Mercaderia',
                     'Mercaderia': 'Mercaderia',
                     'Mercaderista': 'Mercaderista',
-                    'Nro de Ruta Mercaderista ': 'Nro de Ruta (Mercaderia)',
                     'Nro de Ruta Mercaderista': 'Nro de Ruta (Mercaderia)',
-                    'Tiempo de Mercaderia': 'Tiempo de Mercaderia'
+                    'Tiempo de Mercaderia': 'Tiempo de Mercaderia',
+                    'Día de Visita Semana 1': 'Día de Visita Semana 1',
+                    'Día de Visita Semana 2': 'Día de Visita Semana 2',
+                    'Día de Mercaderia Semana 1': 'Día de Mercaderia Semana 1',
+                    'Día de Mercaderia Semana 2': 'Día de Mercaderia Semana 2'
                 }
                 
                 for col_target in columnas_clientes:
                     if col_target == "Nro":
                         continue
-                    # Buscar si alguna columna del excel coincide
+                    
                     encontrada = False
                     for orig, dest in col_map.items():
                         if dest == col_target and orig in df_excel.columns:
-                            nuevo_df[col_target] = df_excel[orig]
+                            # Limpiar strings de espacios sobrantes en los datos si es texto
+                            val = df_excel[orig]
+                            if val.dtype == object:
+                                val = val.astype(str).str.strip()
+                                val = val.replace({'nan': '', 'None': ''})
+                            nuevo_df[col_target] = val
                             encontrada = True
                             break
+                    
                     if not encontrada:
-                        # Revisar por coincidencia exacta de nombre
                         if col_target in df_excel.columns:
-                            nuevo_df[col_target] = df_excel[col_target]
+                            val = df_excel[col_target]
+                            if val.dtype == object:
+                                val = val.astype(str).str.strip()
+                                val = val.replace({'nan': '', 'None': ''})
+                            nuevo_df[col_target] = val
                         else:
                             nuevo_df[col_target] = ""
 
@@ -163,9 +173,9 @@ st.subheader("Cuadro Maestro de Clientes")
 
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
-dias_semana_opciones = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes"]
 
 df_actual = st.session_state["df_clientes"]
+
 edited_df = st.data_editor(
     df_actual,
     num_rows="dynamic",
@@ -175,18 +185,29 @@ edited_df = st.data_editor(
         "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
         "Cliente": st.column_config.TextColumn("Cliente", required=True),
         "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-        "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No", "Si"]),
-        "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No", "Si"]),
+        "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+        "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+        # Configurados como texto libre para permitir escribir o seleccionar varios días (ej. "Lunes, Jueves")
         "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
         "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-        "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No", "Si"]),
+        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
+        "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
         "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
         "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
         "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
         "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2")
     }
 )
+
+# Copiar formato de la última fila si se agrega una nueva
+if len(edited_df) > len(df_actual) and len(df_actual) > 0:
+    ultima_fila_original = df_actual.iloc[-1].copy()
+    for idx in range(len(df_actual), len(edited_df)):
+        if pd.isna(edited_df.loc[idx, "Cliente"]) or edited_df.loc[idx, "Cliente"] == "":
+            edited_df.loc[idx, "Semana 1"] = ultima_fila_original.get("Semana 1", "Sí")
+            edited_df.loc[idx, "Semana 2"] = ultima_fila_original.get("Semana 2", "Sí")
+            edited_df.loc[idx, "Tiempo de Despacho"] = ultima_fila_original.get("Tiempo de Despacho", "24 HORAS")
+            edited_df.loc[idx, "Mercaderia"] = ultima_fila_original.get("Mercaderia", "Sí")
 
 st.session_state["df_clientes"] = edited_df
