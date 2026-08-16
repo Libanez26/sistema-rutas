@@ -632,7 +632,7 @@ with tab_ruta_vendedores:
                 with col_b1:
                     guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial", type="primary", use_container_width=True)
                 with col_b2:
-                    Borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True)
+                    borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True) # <-- Cambiado a minúscula
                 with col_b3:
                     generar_imagen_btn = st.form_submit_button("🖼️ Generar y Visualizar Imagen", use_container_width=True)
 
@@ -644,6 +644,9 @@ with tab_ruta_vendedores:
 
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
+                        
+                        # Si se presionó el botón de borrar historial, podemos limpiar los valores en lugar de rotarlos, 
+                        # o ajustar la lógica según prefieras para tus pruebas.
                         
                         # Desplazamiento rotativo conectado: S1 se vuelve el más nuevo, desplazando hacia atrás los anteriores (S1 pasa a S2, S2 a S3, etc.)
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
