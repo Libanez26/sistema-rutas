@@ -209,7 +209,7 @@ edited_df = st.data_editor(
         "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
         "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
         "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24h", "48h"]),
         "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
         "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
         "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
