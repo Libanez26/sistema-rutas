@@ -107,6 +107,10 @@ columnas_clientes = [
     "Tiempo de Mercaderia",
     "Día de Mercaderia Semana 1",
     "Día de Mercaderia Semana 2",
+    "¿Se visitó?",
+    "Motivo (No visitó)",
+    "¿Hizo pedido?",
+    "Motivo (No hizo pedido)",
 ]
 
 # Cargar Vendedores desde Supabase o usar valores por defecto
@@ -197,312 +201,405 @@ def guardar_en_base_de_datos(df):
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
-st.header("Base de Datos General de Clientes y Rutas")
-st.markdown("Sube tu archivo Excel de rutas para cargar toda la información completa de forma automática.")
+# ==========================================
+# PESTAÑAS PRINCIPALES (GENERAL Y RUTA DE VENDEDORES)
+# ==========================================
+tab_general, tab_ruta_vendedores = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores"])
 
-uploaded_file = st.file_uploader("Cargar archivo (PDF o Excel)", type=["pdf", "xlsx"])
+with tab_general:
+    st.header("Base de Datos General de Clientes y Rutas")
+    st.markdown("Sube tu archivo Excel de rutas para cargar toda la información completa de forma automática.")
 
-if uploaded_file and st.button("Procesar y Organizar con IA"):
-  with st.spinner("Leyendo documento y estructurando todos los datos..."):
-    try:
-      if uploaded_file.name.endswith(".xlsx"):
-        df_excel = pd.read_excel(uploaded_file)
-        df_excel.columns = df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
+    uploaded_file = st.file_uploader("Cargar archivo (PDF o Excel)", type=["pdf", "xlsx"])
 
-        nuevo_df = pd.DataFrame()
-        nuevo_df["Nro"] = range(1, len(df_excel) + 1)
+    if uploaded_file and st.button("Procesar y Organizar con IA"):
+      with st.spinner("Leyendo documento y estructurando todos los datos..."):
+        try:
+          if uploaded_file.name.endswith(".xlsx"):
+            df_excel = pd.read_excel(uploaded_file)
+            df_excel.columns = df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
 
-        for col in df_excel.select_dtypes(include=["object"]).columns:
-          df_excel[col] = df_excel[col].astype(str).str.strip()
-          df_excel[col] = df_excel[col].replace({"nan": "", "None": ""})
+            nuevo_df = pd.DataFrame()
+            nuevo_df["Nro"] = range(1, len(df_excel) + 1)
 
-        mapping_cols = {
-            "Vendedor": "Vendedor",
-            "Nro de Ruta": "Nro de Ruta (Ventas)",
-            "Cliente": "Cliente",
-            "Ubicacion": "Ubicacion",
-            "Semana 1": "Semana 1",
-            "Semana 2": "Semana 2",
-            "Tiempo de Despacho": "Tiempo de Despacho",
-            "Mercaderia": "Mercaderia",
-            "Mercaderista": "Mercaderista",
-            "Nro de Ruta Mercaderista": "Nro de Ruta (Mercaderia)",
-            "Tiempo de Mercaderia": "Tiempo de Mercaderia",
-        }
+            for col in df_excel.select_dtypes(include=["object"]).columns:
+              df_excel[col] = df_excel[col].astype(str).str.strip()
+              df_excel[col] = df_excel[col].replace({"nan": "", "None": ""})
 
-        for col_target in columnas_clientes:
-          if col_target == "Nro":
-            continue
+            mapping_cols = {
+                "Vendedor": "Vendedor",
+                "Nro de Ruta": "Nro de Ruta (Ventas)",
+                "Cliente": "Cliente",
+                "Ubicacion": "Ubicacion",
+                "Semana 1": "Semana 1",
+                "Semana 2": "Semana 2",
+                "Tiempo de Despacho": "Tiempo de Despacho",
+                "Mercaderia": "Mercaderia",
+                "Mercaderista": "Mercaderista",
+                "Nro de Ruta Mercaderista": "Nro de Ruta (Mercaderia)",
+                "Tiempo de Mercaderia": "Tiempo de Mercaderia",
+            }
 
-          encontrada = False
-          for orig, dest in mapping_cols.items():
-            if dest == col_target and orig in df_excel.columns:
-              nuevo_df[col_target] = df_excel[orig]
-              encontrada = True
-              break
+            for col_target in columnas_clientes:
+              if col_target in ["¿Se visitó?", "Motivo (No visitó)", "¿Hizo pedido?", "Motivo (No hizo pedido)"]:
+                if col_target not in nuevo_df.columns:
+                  nuevo_df[col_target] = ""
+                continue
+              if col_target == "Nro":
+                continue
 
-          if not encontrada:
-            match_encontrado = False
-            for col_excel in df_excel.columns:
-              col_limpia = " ".join(col_excel.split())
-              target_limpia = " ".join(col_target.split())
-              if col_limpia.lower() == target_limpia.lower():
-                nuevo_df[col_target] = df_excel[col_excel]
-                match_encontrado = True
-                break
+              encontrada = False
+              for orig, dest in mapping_cols.items():
+                if dest == col_target and orig in df_excel.columns:
+                  nuevo_df[col_target] = df_excel[orig]
+                  encontrada = True
+                  break
 
-            if not match_encontrado:
-              if col_target in df_excel.columns:
-                nuevo_df[col_target] = df_excel[col_target]
-              else:
-                nuevo_df[col_target] = ""
+              if not encontrada:
+                match_encontrado = False
+                for col_excel in df_excel.columns:
+                  col_limpia = " ".join(col_excel.split())
+                  target_limpia = " ".join(col_target.split())
+                  if col_limpia.lower() == target_limpia.lower():
+                    nuevo_df[col_target] = df_excel[col_excel]
+                    match_encontrado = True
+                    break
 
-        for c in ["Semana 1", "Semana 2", "Mercaderia"]:
-          if c in nuevo_df.columns:
-            nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
+                if not match_encontrado:
+                  if col_target in df_excel.columns:
+                    nuevo_df[col_target] = df_excel[col_target]
+                  else:
+                    nuevo_df[col_target] = ""
 
-        st.session_state["df_clientes"] = nuevo_df
-        st.success("¡Archivo Excel cargado con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlo a la base de datos.")
-      else:
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        prompt = f"""
-                Actúa como un experto en extracción de datos logísticos.
-                Analiza el PDF adjunto y extrae toda la información de los clientes.
-                Devuelve la respuesta estrictamente como una lista de objetos JSON con las claves exactas: {columnas_clientes}.
-                No incluyas explicaciones ni texto adicional, solo el JSON puro.
-                """
-        response = model.generate_content([
-            prompt,
-            {"mime_type": "application/pdf", "data": uploaded_file.getvalue()},
-        ])
-        json_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(json_text)
-        df_ia = pd.DataFrame(data)
+            for c in ["Semana 1", "Semana 2", "Mercaderia"]:
+              if c in nuevo_df.columns:
+                nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
-        for col in columnas_clientes:
-          if col not in df_ia.columns:
-            df_ia[col] = ""
+            st.session_state["df_clientes"] = nuevo_df
+            st.success("¡Archivo Excel cargado con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlo a la base de datos.")
+          else:
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            prompt = f"""
+                    Actúa como un experto en extracción de datos logísticos.
+                    Analiza el PDF adjunto y extrae toda la información de los clientes.
+                    Devuelve la respuesta estrictamente como una lista de objetos JSON con las claves exactas: {columnas_clientes}.
+                    No incluyas explicaciones ni texto adicional, solo el JSON puro.
+                    """
+            response = model.generate_content([
+                prompt,
+                {"mime_type": "application/pdf", "data": uploaded_file.getvalue()},
+            ])
+            json_text = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(json_text)
+            df_ia = pd.DataFrame(data)
 
-        st.session_state["df_clientes"] = df_ia[columnas_clientes]
-        st.success("¡Datos del PDF extraídos con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlos a la base de datos.")
-    except Exception as e:
-      st.error(f"Error al procesar el archivo: {e}")
+            for col in columnas_clientes:
+              if col not in df_ia.columns:
+                df_ia[col] = ""
 
-st.markdown("---")
+            st.session_state["df_clientes"] = df_ia[columnas_clientes]
+            st.success("¡Datos del PDF extraídos con éxito en la vista previa! Presiona 'Guardar Cambios' para enviarlos a la base de datos.")
+        except Exception as e:
+          st.error(f"Error al procesar el archivo: {e}")
 
-col_vend, col_merc = st.columns(2)
+    st.markdown("---")
 
-with col_vend:
-  st.subheader("Vendedores")
-  edited_vendedores = st.data_editor(
-      st.session_state["df_vendedores"],
-      num_rows="dynamic",
-      use_container_width=True,
-      key="editor_vendedores_inline",
-  )
+    col_vend, col_merc = st.columns(2)
 
-with col_merc:
-  st.subheader("Mercaderistas CCS")
-  edited_mercaderistas = st.data_editor(
-      st.session_state["df_mercaderistas"],
-      num_rows="dynamic",
-      use_container_width=True,
-      key="editor_mercaderistas_inline",
-  )
+    with col_vend:
+      st.subheader("Vendedores")
+      edited_vendedores = st.data_editor(
+          st.session_state["df_vendedores"],
+          num_rows="dynamic",
+          use_container_width=True,
+          key="editor_vendedores_inline",
+      )
 
-if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
-  st.session_state["df_vendedores"] = edited_vendedores
-  st.session_state["df_mercaderistas"] = edited_mercaderistas
-  guardar_en_base_de_datos(st.session_state["df_clientes"])
-  st.rerun()
+    with col_merc:
+      st.subheader("Mercaderistas CCS")
+      edited_mercaderistas = st.data_editor(
+          st.session_state["df_mercaderistas"],
+          num_rows="dynamic",
+          use_container_width=True,
+          key="editor_mercaderistas_inline",
+      )
 
-st.markdown("---")
-st.subheader("Cuadro Maestro de Clientes")
+    if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
+      st.session_state["df_vendedores"] = edited_vendedores
+      st.session_state["df_mercaderistas"] = edited_mercaderistas
+      guardar_en_base_de_datos(st.session_state["df_clientes"])
+      st.rerun()
 
-lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
-lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
+    st.markdown("---")
+    st.subheader("Cuadro Maestro de Clientes")
 
-# ENVOLVEMOS LA TABLA EN UN FORMULARIO: Esto evita el refresco molesto con cada clic o tecla
-with st.form("form_cuadro_maestro"):
-  edited_df = st.data_editor(
-      st.session_state["df_clientes"],
-      num_rows="dynamic",
-      use_container_width=True,
-      key="editor_clientes",
-      column_config={
-          "Nro": st.column_config.NumberColumn("Nro", required=True),
-          "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-          "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
-          "Cliente": st.column_config.TextColumn("Cliente", required=True),
-          "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-          "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-          "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-          "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-          "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-          "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-          "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-          "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
-          "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-          "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-          "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-          "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-      },
-  )
+    lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
+    lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-  submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
+    with st.form("form_cuadro_maestro"):
+      edited_df = st.data_editor(
+          st.session_state["df_clientes"],
+          num_rows="dynamic",
+          use_container_width=True,
+          key="editor_clientes",
+          column_config={
+              "Nro": st.column_config.NumberColumn("Nro", required=True),
+              "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+              "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
+              "Cliente": st.column_config.TextColumn("Cliente", required=True),
+              "Ubicacion": st.column_config.TextColumn("Ubicacion"),
+              "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+              "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
+              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+              "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+              "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+              "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+              "¿Se visitó?": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"]),
+              "Motivo (No visitó)": st.column_config.TextColumn("Motivo (No visitó)"),
+              "¿Hizo pedido?": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"]),
+              "Motivo (No hizo pedido)": st.column_config.TextColumn("Motivo (No hizo pedido)"),
+          },
+      )
 
-  if submitted:
-    df = edited_df.copy()
-    if not df.empty:
-      # Heredar datos de la última fila si es nueva
-      if len(df) > 1:
-        ultima_fila = df.iloc[-1]
-        cliente_val = ultima_fila.get("Cliente", "")
-        if pd.isna(cliente_val) or str(cliente_val).strip() == "":
-          fila_anterior = df.iloc[-2].copy()
-          for col in df.columns:
-            if col != "Cliente" and col != "Nro":
-              df.at[df.index[-1], col] = fila_anterior[col]
-          try:
-            df.at[df.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
-          except:
-            pass
+      submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
 
-      df_v = st.session_state["df_vendedores"]
-      df_m = st.session_state["df_mercaderistas"]
+      if submitted:
+        df = edited_df.copy()
+        if not df.empty:
+          if len(df) > 1:
+            ultima_fila = df.iloc[-1]
+            cliente_val = ultima_fila.get("Cliente", "")
+            if pd.isna(cliente_val) or str(cliente_val).strip() == "":
+              fila_anterior = df.iloc[-2].copy()
+              for col in df.columns:
+                if col != "Cliente" and col != "Nro":
+                  df.at[df.index[-1], col] = fila_anterior[col]
+              try:
+                df.at[df.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
+              except:
+                pass
 
-      # CONEXIÓN TOTAL Y ESTRICTA: Al presionar guardar, se asigna el número de ruta correspondiente al vendedor y mercaderista seleccionado
-      for idx, row in df.iterrows():
-        vendedor_actual = row.get("Vendedor")
-        if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
-          match_v = df_v[df_v["Vendedor"] == vendedor_actual]
-          if not match_v.empty:
-            df.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+          df_v = st.session_state["df_vendedores"]
+          df_m = st.session_state["df_mercaderistas"]
 
-        merc_actual = row.get("Mercaderista")
-        if pd.notna(merc_actual) and str(merc_actual).strip() != "":
-          match_m = df_m[df_m["Mercaderista"] == merc_actual]
-          if not match_m.empty:
-            df.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+          for idx, row in df.iterrows():
+            vendedor_actual = row.get("Vendedor")
+            if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
+              match_v = df_v[df_v["Vendedor"] == vendedor_actual]
+              if not match_v.empty:
+                df.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
 
-    st.session_state["df_clientes"] = df
-    guardar_en_base_de_datos(df)
-    st.rerun()
+            merc_actual = row.get("Mercaderista")
+            if pd.notna(merc_actual) and str(merc_actual).strip() != "":
+              match_m = df_m[df_m["Mercaderista"] == merc_actual]
+              if not match_m.empty:
+                df.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
-st.markdown("---")
-st.subheader("Opciones de Descarga del Cuadro Maestro")
+        st.session_state["df_clientes"] = df
+        guardar_en_base_de_datos(df)
+        st.rerun()
 
-col_dl1, col_dl2 = st.columns(2)
+    st.markdown("---")
+    st.subheader("Opciones de Descarga del Cuadro Maestro")
 
-with col_dl1:
-  output_excel = io.BytesIO()
-  with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
-    st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Base de Datos")
-  excel_data = output_excel.getvalue()
+    col_dl1, col_dl2 = st.columns(2)
 
-  st.download_button(
-      label="📥 Descargar en Formato Excel (.xlsx)",
-      data=excel_data,
-      file_name="Cuadro_Maestro_Rutas.xlsx",
-      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      use_container_width=True,
-  )
+    with col_dl1:
+      output_excel = io.BytesIO()
+      with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
+        st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Base de Datos")
+      excel_data = output_excel.getvalue()
 
-with col_dl2:
-  def generar_pdf(df):
-    buffer = io.BytesIO()
-    # Usamos formato horizontal (landscape) con márgenes de 15 para aprovechar el ancho al máximo
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=landscape(letter), 
-        rightMargin=15, 
-        leftMargin=15, 
-        topMargin=20, 
-        bottomMargin=20
-    )
-    elements = []
+      st.download_button(
+          label="📥 Descargar en Formato Excel (.xlsx)",
+          data=excel_data,
+          file_name="Cuadro_Maestro_Rutas.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          use_container_width=True,
+      )
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "TitleStyle",
-        parent=styles["Heading1"],
-        fontSize=14,
-        textColor=colors.HexColor("#1f4e78"),
-        spaceAfter=12,
-        alignment=1,
-    )
+    with col_dl2:
+      def generar_pdf(df):
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=landscape(letter), 
+            rightMargin=15, 
+            leftMargin=15, 
+            topMargin=20, 
+            bottomMargin=20
+        )
+        elements = []
 
-    elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas", title_style))
-    elements.append(Spacer(1, 5))
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "TitleStyle",
+            parent=styles["Heading1"],
+            fontSize=14,
+            textColor=colors.HexColor("#1f4e78"),
+            spaceAfter=12,
+            alignment=1,
+        )
 
-    # Estilos para celdas y encabezados limpios
-    cell_style = ParagraphStyle(
-        "CellStyle",
-        parent=styles["Normal"],
-        fontSize=6.5,
-        leading=8,
-        alignment=1, # Centrado
-    )
+        elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas", title_style))
+        elements.append(Spacer(1, 5))
+
+        cell_style = ParagraphStyle(
+            "CellStyle",
+            parent=styles["Normal"],
+            fontSize=6.5,
+            leading=8,
+            alignment=1,
+        )
+        
+        header_style = ParagraphStyle(
+            "HeaderStyle",
+            parent=styles["Normal"],
+            fontSize=6.5,
+            leading=8,
+            textColor=colors.whitesmoke,
+            fontName="Helvetica-Bold",
+            alignment=1,
+        )
+
+        data = []
+        header_row = [Paragraph(str(col), header_style) for col in df.columns]
+        data.append(header_row)
+
+        for _, row in df.iterrows():
+            row_data = [Paragraph(str(val), cell_style) for val in row.values]
+            data.append(row_data)
+
+        col_widths = [
+            25,  # Nro
+            55,  # Vendedor
+            45,  # Nro de Ruta (Ventas)
+            65,  # Cliente
+            55,  # Ubicacion
+            35,  # Semana 1
+            35,  # Semana 2
+            50,  # Día de Visita Semana 1
+            50,  # Día de Visita Semana 2
+            45,  # Tiempo de Despacho
+            40,  # Mercaderia
+            55,  # Mercaderista
+            45,  # Nro de Ruta (Mercaderia)
+            45,  # Tiempo de Mercaderia
+            50,  # Día de Mercaderia Semana 1
+            50,   # Día de Mercaderia Semana 2
+            35,  # ¿Se visitó?
+            55,  # Motivo (No visitó)
+            35,  # ¿Hizo pedido?
+            55   # Motivo (No hizo pedido)
+        ]
+
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
+                ("TOPPADDING", (0, 1), (-1, -1), 4),
+            ])
+        )
+
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+with tab_ruta_vendedores:
+    st.header("Seguimiento de Ruta de Vendedores")
+    st.markdown("Filtra por vendedor y día de visita para gestionar el estatus de las visitas y los pedidos en terreno.")
+
+    df_seguimiento = st.session_state["df_clientes"].copy()
+    columnas_control = ["¿Se visitó?", "Motivo (No visitó)", "¿Hizo pedido?", "Motivo (No hizo pedido)"]
+    for col in columnas_control:
+        if col not in df_seguimiento.columns:
+            df_seguimiento[col] = ""
+
+    vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
     
-    header_style = ParagraphStyle(
-        "HeaderStyle",
-        parent=styles["Normal"],
-        fontSize=6.5,
-        leading=8,
-        textColor=colors.whitesmoke,
-        fontName="Helvetica-Bold",
-        alignment=1,
-    )
+    if not vendedores_disponibles:
+        st.warning("No hay vendedores registrados aún. Carga o ingresa información en el Cuadro Maestro primero.")
+    else:
+        col_f1, col_f2 = st.columns(2)
+        
+        with col_f1:
+            vendedor_seleccionado = st.selectbox("Seleccionar Vendedor", vendedores_disponibles, key="filtro_vendedor_ruta")
+            
+        with col_f2:
+            dias_opciones = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            dia_seleccionado = st.selectbox("Seleccionar Día de Visita", dias_opciones, key="filtro_dia_ruta")
 
-    data = []
-    header_row = [Paragraph(str(col), header_style) for col in df.columns]
-    data.append(header_row)
+        mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
+        mask_dia = (
+            df_seguimiento["Día de Visita Semana 1"].astype(str).str.contains(dia_seleccionado, case=False, na=False) |
+            df_seguimiento["Día de Visita Semana 2"].astype(str).str.contains(dia_seleccionado, case=False, na=False)
+        )
+        
+        df_filtrado = df_seguimiento[mask_vendedor & mask_dia].copy()
 
-    for _, row in df.iterrows():
-        row_data = [Paragraph(str(val), cell_style) for val in row.values]
-        data.append(row_data)
+        if df_filtrado.empty:
+            st.info(f"No se encontraron clientes asignados al vendedor **{vendedor_seleccionado}** para el día **{dia_seleccionado}**.")
+        else:
+            st.success(f"Se encontraron **{len(df_filtrado)}** clientes para esta ruta.")
 
-    # Ancho total disponible en Letter horizontal con márgenes de 15 = 762 puntos.
-    # Distribuimos los anchos personalizados por columna para que las de texto largo tengan espacio:
-    # Orden de columnas: Nro, Vendedor, Nro de Ruta (Ventas), Cliente, Ubicacion, Semana 1, Semana 2, 
-    # Día Visita S1, Día Visita S2, Tiempo Despacho, Mercaderia, Mercaderista, Nro de Ruta (Mercaderia), 
-    # Tiempo Mercaderia, Día Merc. S1, Día Merc. S2
-    col_widths = [
-        25,  # Nro
-        55,  # Vendedor
-        45,  # Nro de Ruta (Ventas)
-        65,  # Cliente
-        55,  # Ubicacion
-        35,  # Semana 1
-        35,  # Semana 2
-        50,  # Día de Visita Semana 1
-        50,  # Día de Visita Semana 2
-        45,  # Tiempo de Despacho
-        40,  # Mercaderia
-        55,  # Mercaderista
-        45,  # Nro de Ruta (Mercaderia)
-        45,  # Tiempo de Mercaderia
-        50,  # Día de Mercaderia Semana 1
-        50   # Día de Mercaderia Semana 2
-    ] # Total exacto ajustado al ancho de página
+            cols_a_mostrar = [
+                "Nro",
+                "Cliente",
+                "Ubicacion",
+                "Nro de Ruta (Ventas)",
+                "¿Se visitó?",
+                "Motivo (No visitó)",
+                "¿Hizo pedido?",
+                "Motivo (No hizo pedido)"
+            ]
+            
+            for c in cols_a_mostrar:
+                if c not in df_filtrado.columns:
+                    df_filtrado[c] = ""
 
-    table = Table(data, colWidths=col_widths, repeatRows=1)
-    table.setStyle(
-        TableStyle([
-            # Encabezado verde oscuro corporativo (similar al de tu captura de referencia)
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-            ("TOPPADDING", (0, 0), (-1, 0), 5),
-            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
-            ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
-            ("TOPPADDING", (0, 1), (-1, -1), 4),
-        ])
-    )
+            df_view = df_filtrado[cols_a_mostrar]
 
-    elements.append(table)
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+            with st.form("form_ruta_vendedores"):
+                df_editado_ruta = st.data_editor(
+                    df_view,
+                    use_container_width=True,
+                    num_rows="fixed",
+                    key="editor_ruta_vendedores",
+                    column_config={
+                        "Nro": st.column_config.NumberColumn("Nro", disabled=True),
+                        "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
+                        "Ubicacion": st.column_config.TextColumn("Ubicación", disabled=True),
+                        "Nro de Ruta (Ventas)": st.column_config.TextColumn("Ruta", disabled=True),
+                        "¿Se visitó?": st.column_config.SelectboxColumn("¿Se visitó?", options=["Sí", "No"], required=True),
+                        "Motivo (No visitó)": st.column_config.TextColumn("Motivo de no visita (si aplica)"),
+                        "¿Hizo pedido?": st.column_config.SelectboxColumn("¿Hizo pedido?", options=["Sí", "No"], required=True),
+                        "Motivo (No hizo pedido)": st.column_config.TextColumn("Motivo de no pedido (si aplica)"),
+                    }
+                )
+
+                guardar_ruta_btn = st.form_submit_button("💾 Guardar Estatus de Ruta", type="primary", use_container_width=True)
+
+                if guardar_ruta_btn:
+                    for idx, row in df_editado_ruta.iterrows():
+                        orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
+                        st.session_state["df_clientes"].at[orig_idx, "¿Se visitó?"] = row["¿Se visitó?"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo (No visitó)"] = row["Motivo (No visitó)"]
+                        st.session_state["df_clientes"].at[orig_idx, "¿Hizo pedido?"] = row["¿Hizo pedido?"]
+                        st.session_state["df_clientes"].at[orig_idx, "Motivo (No hizo pedido)"] = row["Motivo (No hizo pedido)"]
+
+                    guardar_en_base_de_datos(st.session_state["df_clientes"])
+                    st.success("¡Estatus de la ruta guardado y sincronizado con éxito!")
+                    st.rerun()
