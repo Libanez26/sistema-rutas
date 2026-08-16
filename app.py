@@ -293,7 +293,7 @@ st.markdown("---")
 col_vend, col_merc = st.columns(2)
 
 with col_vend:
-  st.subheader("Gestión de Vendedores")
+  st.subheader("Vendedores")
   edited_vendedores = st.data_editor(
       st.session_state["df_vendedores"],
       num_rows="dynamic",
@@ -302,7 +302,7 @@ with col_vend:
   )
 
 with col_merc:
-  st.subheader("Gestión de Mercaderistas CCS")
+  st.subheader("Mercaderistas CCS")
   edited_mercaderistas = st.data_editor(
       st.session_state["df_mercaderistas"],
       num_rows="dynamic",
