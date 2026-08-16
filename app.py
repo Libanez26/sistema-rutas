@@ -704,38 +704,69 @@ with tab_ruta_vendedores:
 
                 elements.append(Paragraph(f"REPORTE DE RUTA - {vendedor_nom.upper()}", header_title_style))
                 if es_toda_la_semana:
-                    elements.append(Paragraph(f"Reporte Completo | Período: <b>{semana_sel}</b>", sub_title_style))
+                    elements.append(Paragraph(f"Reporte Completo de Toda la Semana | Período: <b>{semana_sel}</b>", sub_title_style))
                 else:
                     elements.append(Paragraph(f"Día: <b>{dia_sel}</b> | Período: <b>{semana_sel}</b>", sub_title_style))
 
                 cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
                 head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
 
-                table_data = [[
-                    Paragraph("Nro", head_s),
-                    Paragraph("Cliente", head_s),
-                    Paragraph("Ubicación", head_s),
-                    Paragraph("Ruta", head_s),
-                    Paragraph("Visita", head_s),
-                    Paragraph("Pedido", head_s),
-                    Paragraph("Motivo / Observación", head_s)
-                ]]
+                if es_toda_la_semana:
+                    table_data = [[
+                        Paragraph("Nro", head_s),
+                        Paragraph("Cliente", head_s),
+                        Paragraph("Ubicación", head_s),
+                        Paragraph("Ruta", head_s),
+                        Paragraph("Día", head_s),
+                        Paragraph("Visita", head_s),
+                        Paragraph("Pedido", head_s),
+                        Paragraph("Motivo / Observación", head_s)
+                    ]]
+                else:
+                    table_data = [[
+                        Paragraph("Nro", head_s),
+                        Paragraph("Cliente", head_s),
+                        Paragraph("Ubicación", head_s),
+                        Paragraph("Ruta", head_s),
+                        Paragraph("Visita", head_s),
+                        Paragraph("Pedido", head_s),
+                        Paragraph("Motivo / Observación", head_s)
+                    ]]
+
+                col_dia_filtro = "Día de Visita Semana 1" if semana_sel == "Semana 1" else "Día de Visita Semana 2"
 
                 for _, r in df_f.iterrows():
                     v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
                     v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
+                    dia_visita_val = str(r.get(col_dia_filtro, ""))
                     
-                    table_data.append([
-                        Paragraph(str(r.get("Nro", "")), cell_s),
-                        Paragraph(str(r.get("Cliente", "")), cell_s),
-                        Paragraph(str(r.get("Ubicacion", "")), cell_s),
-                        Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
-                        Paragraph(v_visita, cell_s),
-                        Paragraph(v_pedido, cell_s),
-                        Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
-                    ])
+                    if es_toda_la_semana:
+                        table_data.append([
+                            Paragraph(str(r.get("Nro", "")), cell_s),
+                            Paragraph(str(r.get("Cliente", "")), cell_s),
+                            Paragraph(str(r.get("Ubicacion", "")), cell_s),
+                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                            Paragraph(dia_visita_val, cell_s),
+                            Paragraph(v_visita, cell_s),
+                            Paragraph(v_pedido, cell_s),
+                            Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                        ])
+                    else:
+                        table_data.append([
+                            Paragraph(str(r.get("Nro", "")), cell_s),
+                            Paragraph(str(r.get("Cliente", "")), cell_s),
+                            Paragraph(str(r.get("Ubicacion", "")), cell_s),
+                            Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                            Paragraph(v_visita, cell_s),
+                            Paragraph(v_pedido, cell_s),
+                            Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                        ])
 
-                col_w = [35, 150, 130, 50, 50, 50, 260]
+                if es_toda_la_semana:
+                    col_w = [30, 140, 110, 45, 65, 45, 45, 230]
+                else:
+                    col_w = [35, 150, 130, 50, 50, 50, 260]
+
                 t = Table(table_data, colWidths=col_w, repeatRows=1)
                 t.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
