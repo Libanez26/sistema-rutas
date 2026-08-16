@@ -276,6 +276,7 @@ with col_merc:
       key="editor_mercaderistas_inline",
   )
 
+# Botón para fijar los cambios de Vendedores y Mercaderistas sin perder el foco
 if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
   st.success("¡Cambios de personal actualizados correctamente!")
 
