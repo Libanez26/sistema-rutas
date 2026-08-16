@@ -1,4 +1,4 @@
-import io
+[cite: 5]import io
 import json
 import pandas as pd
 import streamlit as st
@@ -334,30 +334,39 @@ with tab_general:
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
     with st.form("form_cuadro_maestro"):
+      # Diccionario base con la configuración de las columnas visibles principales
+      column_config_dict = {
+          "Nro": st.column_config.NumberColumn("Nro", required=True),
+          "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+          "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
+          "Cliente": st.column_config.TextColumn("Cliente", required=True),
+          "Ubicacion": st.column_config.TextColumn("Ubicacion"),
+          "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+          "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+          "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
+          "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+          "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+          "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+          "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+          "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+          "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+          "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+          "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+      }
+
+      # Ocultar automáticamente las columnas de seguimiento histórico en el cuadro maestro principal
+      for s_idx in [1, 2, 3, 4]:
+        for prefix in ["Visita_S", "Pedido_S", "Motivo_Pedido_S"]:
+          col_name = f"{prefix}{s_idx}"
+          column_config_dict[col_name] = st.column_config.TextColumn(col_name, disabled=True, hidden=True)
+
       edited_df = st.data_editor(
           st.session_state["df_clientes"],
           num_rows="dynamic",
           use_container_width=True,
           key="editor_clientes",
           hide_index=True,
-          column_config={
-              "Nro": st.column_config.NumberColumn("Nro", required=True),
-              "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-              "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
-              "Cliente": st.column_config.TextColumn("Cliente", required=True),
-              "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-              "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-              "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-              "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-              "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
-              "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-          },
+          column_config=column_config_dict,
       )
 
       submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
