@@ -587,7 +587,7 @@ with tab_ruta_vendedores:
             
             dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
-            elements.append(Paragraph(f"REPORTE DE RUTAS POR VENDEDOR: {vendedor_filtro.upper()}", title_style))
+            elements.append(Paragraph(f"RUTAS POR VENDEDOR: {vendedor_filtro.upper()}", title_style))
 
             df_vend_subset = df_todos[df_todos["Vendedor"].astype(str).str.strip() == vendedor_filtro.strip()].copy()
             match_v_reg = st.session_state["df_vendedores"][st.session_state["df_vendedores"]["Vendedor"].astype(str).str.strip() == vendedor_filtro.strip()]
