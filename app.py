@@ -627,11 +627,11 @@ with tab_ruta_vendedores:
                 with col_b1:
                     guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial", type="primary", use_container_width=True)
                 with col_b2:
-                    borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True)
+                    limpiar_semana_btn = st.form_submit_button("🔄 Limpiar Datos en Pantalla", use_container_width=True)
                 with col_b3:
                     generar_imagen_btn = st.form_submit_button("🖼️ Generar y Visualizar Imagen", use_container_width=True)
 
-                if guardar_ruta_btn or borrar_historial_btn:
+                if guardar_ruta_btn:
                     for s_idx in [1, 2, 3, 4]:
                         for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
                             if c_field not in st.session_state["df_clientes"].columns:
@@ -660,6 +660,14 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado y historial refrescado correctamente!")
                     st.rerun()
 
+                if limpiar_semana_btn:
+                    for idx, _ in df_editado_ruta.iterrows():
+                        orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
+                        st.session_state["df_clientes"].loc[orig_idx, ["Visita_S1", "Pedido_S1", "Motivo_Pedido_S1"]] = ""
+                    guardar_en_base_de_datos(st.session_state["df_clientes"])
+                    st.success("¡Datos de la Semana 1 limpiados con éxito!")
+                    st.rerun()
+
                 if generar_imagen_btn:
                     st.success("🖼️ **Vista previa de Tarjeta / Imagen de Ruta Generada:**")
                     for _, row_img in df_editado_ruta.iterrows():
@@ -673,9 +681,8 @@ with tab_ruta_vendedores:
             # SECCIÓN INFERIOR: Historial limpio con casilla selectora para expediente y opciones de borrado avanzado
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
-            st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar su expediente y motivo detallado por semana:")
+            st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar sus detalles por semana:")
 
-            # Preparar dataframe para el historial con columna de selección (checkbox)
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
@@ -714,7 +721,6 @@ with tab_ruta_vendedores:
                 }
             )
 
-            # Panel de opciones de borrado inteligente ubicado exactamente aquí
             with st.expander("🗑️ Borrar Información de la Semana en Seguimiento / Historial"):
                 tipo_borrado = st.radio(
                     "¿Qué acción deseas realizar?",
@@ -750,7 +756,6 @@ with tab_ruta_vendedores:
                         st.success("¡Historial completo de las 4 semanas borrado con éxito para esta ruta!")
                         st.rerun()
 
-            # Buscar cuáles clientes tienen la casilla "Ver Detalle" marcada
             clientes_seleccionados_checkbox = df_historial_editado[df_historial_editado["Ver Detalle"] == True]
 
             if not clientes_seleccionados_checkbox.empty:
