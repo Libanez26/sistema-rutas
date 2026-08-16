@@ -782,6 +782,100 @@ with tab_ruta_vendedores:
                 buffer.seek(0)
                 return buffer.getvalue()
 
+            def generar_imagen_resumen_semanal_por_dias(df_f, vendedor_nom, semana_sel):
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=landscape(letter),
+                    rightMargin=20,
+                    leftMargin=20,
+                    topMargin=20,
+                    bottomMargin=20
+                )
+                elements = []
+                styles = getSampleStyleSheet()
+
+                header_title_style = ParagraphStyle(
+                    "HeaderTitle",
+                    parent=styles["Heading1"],
+                    fontSize=12,
+                    textColor=colors.HexColor("#1f4e78"),
+                    alignment=1,
+                    spaceAfter=4
+                )
+                sub_title_style = ParagraphStyle(
+                    "SubTitle",
+                    parent=styles["Normal"],
+                    fontSize=9,
+                    textColor=colors.HexColor("#444444"),
+                    alignment=1,
+                    spaceAfter=10
+                )
+                day_title_style = ParagraphStyle(
+                    "DayTitle",
+                    parent=styles["Heading2"],
+                    fontSize=10,
+                    textColor=colors.HexColor("#2C5E3B"),
+                    spaceBefore=8,
+                    spaceAfter=4,
+                    alignment=0
+                )
+
+                elements.append(Paragraph(f"REPORTE GENERAL DE RUTA - {vendedor_nom.upper()}", header_title_style))
+                elements.append(Paragraph(f"Desglose por Día de la Semana | Período: <b>{semana_sel}</b>", sub_title_style))
+
+                cell_s = ParagraphStyle("CellS", parent=styles["Normal"], fontSize=8, leading=10, alignment=1)
+                head_s = ParagraphStyle("HeadS", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
+
+                col_dia_filtro = "Día de Visita Semana 1" if semana_sel == "Semana 1" else "Día de Visita Semana 2"
+                dias_orden = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+                for dia in dias_orden:
+                    df_dia = df_f[df_f[col_dia_filtro].astype(str).str.contains(dia, case=False, na=False)].copy()
+                    if not df_dia.empty:
+                        elements.append(Paragraph(f"📅 Día: {dia.upper()}", day_title_style))
+                        
+                        table_data = [[
+                            Paragraph("Nro", head_s),
+                            Paragraph("Cliente", head_s),
+                            Paragraph("Ubicación", head_s),
+                            Paragraph("Ruta", head_s),
+                            Paragraph("Visita", head_s),
+                            Paragraph("Pedido", head_s),
+                            Paragraph("Motivo / Observación", head_s)
+                        ]]
+
+                        for _, r in df_dia.iterrows():
+                            v_visita = "Sí" if str(r.get("Visita_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
+                            v_pedido = "Sí" if str(r.get("Pedido_S1", "")).lower() in ["sí", "si", "true", "1", "verdadero"] else "No"
+                            
+                            table_data.append([
+                                Paragraph(str(r.get("Nro", "")), cell_s),
+                                Paragraph(str(r.get("Cliente", "")), cell_s),
+                                Paragraph(str(r.get("Ubicacion", "")), cell_s),
+                                Paragraph(str(r.get("Nro de Ruta (Ventas)", "")), cell_s),
+                                Paragraph(v_visita, cell_s),
+                                Paragraph(v_pedido, cell_s),
+                                Paragraph(str(r.get("Motivo_Pedido_S1", "")), cell_s)
+                            ])
+
+                        col_w = [35, 150, 130, 50, 50, 50, 260]
+                        t = Table(table_data, colWidths=col_w, repeatRows=1)
+                        t.setStyle(TableStyle([
+                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                            ("TOPPADDING", (0, 0), (-1, -1), 3),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ]))
+                        elements.append(t)
+                        elements.append(Spacer(1, 6))
+
+                doc.build(elements)
+                buffer.seek(0)
+                return buffer.getvalue()
+
             col_img1, col_img2 = st.columns(2)
 
             with col_img1:
@@ -797,11 +891,11 @@ with tab_ruta_vendedores:
 
             with col_img2:
                 df_toda_la_semana = df_seguimiento[mask_vendedor].copy()
-                pdf_semana_bytes = generar_imagen_resumen_vendedor(df_toda_la_semana, vendedor_seleccionado, dia_seleccionado, semana_seleccionada, es_toda_la_semana=True)
+                pdf_semanal_por_dias_bytes = generar_imagen_resumen_semanal_por_dias(df_toda_la_semana, vendedor_seleccionado, semana_seleccionada)
                 st.download_button(
-                    label="📥 Descargar Reporte Toda la Semana (PDF)",
-                    data=pdf_semana_bytes,
-                    file_name=f"Reporte_Ruta_{vendedor_seleccionado}_Toda_La_Semana.pdf",
+                    label="📥 Descargar Reporte Semanal por Días (PDF)",
+                    data=pdf_semanal_por_dias_bytes,
+                    file_name=f"Reporte_Semanal_Dias_{vendedor_seleccionado}.pdf",
                     mime="application/pdf",
                     use_container_width=True,
                     type="primary"
@@ -910,8 +1004,8 @@ with tab_ruta_vendedores:
                             detalle_semanas_rows = [
                                 {"Semana": "Semana 1 (Actual)", "Visita": c_data.get("Visita_S1", "No"), "Pedido": c_data.get("Pedido_S1", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S1", "Sin observaciones")},
                                 {"Semana": "Semana 2", "Visita": c_data.get("Visita_S2", "No"), "Pedido": c_data.get("Pedido_S2", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S2", "Sin observaciones")},
-                                {"Semana": "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
-                                {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
+                                {"Semana": "Semana 3", "Visita": c_data.get("Semana 3", "No") if "Visita_S3" not in c_data else c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
+                                {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Responsable": "", "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
                             ]
                             
                             df_detalle_cliente = pd.DataFrame(detalle_semanas_rows)
