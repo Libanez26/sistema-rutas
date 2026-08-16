@@ -225,16 +225,13 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
     if not dia_visita_str or pd.isna(dia_visita_str) or str(dia_visita_str).strip() in ["", "nan", "None", "No asignado"]:
         return "No asignado"
     
-    # Días laborables válidos de lunes a viernes (índices 0 al 4)
     dias_habiles = ["lunes", "martes", "miércoles", "jueves", "viernes"]
-    
-    # Mapeo general para identificar la posición considerando toda la semana
     dias_orden_completo = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     
     tiempo_limpio = str(tiempo_despacho).strip().upper()
     if "48" in tiempo_limpio:
         saltos_habiles = 2
-    else: # 24 horas por defecto
+    else: 
         saltos_habiles = 1
 
     sub_dias = [d.strip() for d in str(dia_visita_str).split(",")]
@@ -251,7 +248,6 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
             resultados_despacho.append(d_visita)
             continue
 
-        # Si el día de visita cae en fin de semana, se ignora/no aplica para despacho hábil
         if d_limpio in ["sábado", "domingo"]:
             continue
 
@@ -933,19 +929,19 @@ with tab_ruta_despacho:
         with col_filtro_sem:
             semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
 
+        df_despachos_filtrado = df_despachos.copy()
         if vendedor_filtro_esp != "Todos":
-            df_despachos = df_despachos[df_despachos["Vendedor"].astype(str).str.strip() == vendedor_filtro_esp.strip()]
+            df_despachos_filtrado = df_despachos_filtrado[df_despachos_filtrado["Vendedor"].astype(str).str.strip() == vendedor_filtro_esp.strip()]
 
         datos_vista_despacho = []
         col_visita_seleccionada = "Día de Visita Semana 1" if semana_filtro_esp == "Semana 1" else "Día de Visita Semana 2"
 
-        for _, r in df_despachos.iterrows():
+        for _, r in df_despachos_filtrado.iterrows():
             cliente_val = r.get("Cliente", "No aplica")
             ubicacion_val = r.get("Ubicacion", "No aplica")
             tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
             dia_visita_actual = r.get(col_visita_seleccionada, "")
             
-            # Cálculo de despacho omitiendo fines de semana
             dia_despacho_calculado = calcular_despacho_por_dia_y_semana(dia_visita_actual, semana_filtro_esp, tiempo_desp)
             
             datos_vista_despacho.append({
@@ -956,6 +952,88 @@ with tab_ruta_despacho:
             })
 
         df_tabla_despacho_final = pd.DataFrame(datos_vista_despacho)
+
+        def generar_pdf_matriz_despacho(df_todos_original, vendedor_filtro, semana_filtro):
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=12, textColor=colors.HexColor("#1f4e78"), spaceAfter=8, alignment=1)
+            section_style = ParagraphStyle("SectionStyle", parent=styles["Heading2"], fontSize=10, textColor=colors.HexColor("#2C5E3B"), spaceBefore=6, spaceAfter=4, alignment=0)
+            
+            cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=6, leading=7.5, alignment=1)
+            header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], fontSize=6.5, leading=8, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
+            
+            dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
+            titulo_vendedor_txt = f"TODOS LOS VENDEDORES" if vendedor_filtro == "Todos" else f"VENDEDOR: {vendedor_filtro.upper()}"
+            elements.append(Paragraph(f"RUTAS DE DESPACHO - {semana_filtro.upper()} ({titulo_vendedor_txt})", title_style))
+
+            df_subset = df_todos_original.copy()
+            if vendedor_filtro != "Todos":
+                df_subset = df_subset[df_subset["Vendedor"].astype(str).str.strip() == vendedor_filtro.strip()]
+
+            col_dia_campo = "Día de Visita Semana 1" if semana_filtro == "Semana 1" else "Día de Visita Semana 2"
+
+            matriz_dias = {dia: [] for dia in dias_semana}
+            
+            for _, r_row in df_subset.iterrows():
+                tiempo_desp = r_row.get("Tiempo de Despacho", "24 HORAS")
+                dia_v_val = r_row.get(col_dia_campo, "")
+                
+                dia_desp_calc = calcular_despacho_por_dia_y_semana(dia_v_val, semana_filtro, tiempo_desp)
+                cli_nombre = str(r_row.get("Cliente", ""))
+                cli_ubi = str(r_row.get("Ubicacion", ""))
+                
+                sub_despachos = [d.strip() for d in str(dia_desp_calc).split(",")]
+                for d_esp in sub_despachos:
+                    d_limpio = normalizar_dia(d_esp.split("(")[0].strip())
+                    if d_limpio in matriz_dias and cli_nombre and cli_nombre.lower() != "nan":
+                        texto_celda = f"{cli_nombre} - {cli_ubi}" if cli_ubi and cli_ubi.lower() != "nan" else cli_nombre
+                        matriz_dias[d_limpio].append(texto_celda)
+
+            max_filas = max([len(v) for v in matriz_dias.values()] or [1])
+            
+            headers = [Paragraph(f"#", header_style)] + [Paragraph(d.upper(), header_style) for d in dias_semana]
+            tabla_data = [headers]
+
+            for i in range(max_filas):
+                fila_cells = [Paragraph(str(i + 1), cell_style)]
+                for d in dias_semana:
+                    lista_clientes_dia = matriz_dias[d]
+                    val_txt = lista_clientes_dia[i] if i < len(lista_clientes_dia) else ""
+                    fila_cells.append(Paragraph(val_txt, cell_style))
+                tabla_data.append(fila_cells)
+
+            t = Table(tabla_data, colWidths=[22] + [(762 - 22) / 5] * 5, repeatRows=1)
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#fdfdfd")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(t)
+
+            doc.build(elements)
+            buffer.seek(0)
+            return buffer.getvalue()
+
+        col_dl_desp_1, col_dl_desp_2 = st.columns([2, 3])
+        with col_dl_desp_1:
+            pdf_bytes_despacho = generar_pdf_matriz_despacho(df_despachos, vendedor_filtro_esp, semana_filtro_esp)
+            st.download_button(
+                label=f"📥 Descargar PDF Ruta de Despacho",
+                data=pdf_bytes_despacho,
+                file_name=f"Ruta_Despacho_{semana_filtro_esp.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        st.markdown("---")
 
         st.dataframe(
             df_tabla_despacho_final,
