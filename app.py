@@ -203,7 +203,7 @@ def guardar_en_base_de_datos(df):
       st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
-# PESTAÑAS PRINCIPALES (GENERAL Y RUTA DE VENDEDORES)
+# PESTAÑAS PRINCIPALES
 # ==========================================
 tab_general, tab_ruta_vendedores = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores"])
 
@@ -405,6 +405,37 @@ with tab_general:
         st.rerun()
 
     st.markdown("---")
+    
+    # ----------------------------------------------------
+    # BOTÓN PARA BORRAR HISTORIAL
+    # ----------------------------------------------------
+    st.subheader("🧹 Gestión de Historial de Visitas")
+    if "confirmar_borrado_historial" not in st.session_state:
+        st.session_state["confirmar_borrado_historial"] = False
+
+    if not st.session_state["confirmar_borrado_historial"]:
+        if st.button("🗑️ Borrar Historial de Visitas y Pedidos"):
+            st.session_state["confirmar_borrado_historial"] = True
+            st.rerun()
+    else:
+        st.warning("⚠️ ¿Estás seguro de que deseas eliminar todo el historial de visitas, pedidos y motivos de las 4 semanas para todos los clientes? Esta acción no se puede deshacer.")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            if st.button("Sí, borrar todo el historial", type="primary"):
+                for s_idx in [1, 2, 3, 4]:
+                    for col_hist in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
+                        if col_hist in st.session_state["df_clientes"].columns:
+                            st.session_state["df_clientes"][col_hist] = ""
+                guardar_en_base_de_datos(st.session_state["df_clientes"])
+                st.session_state["confirmar_borrado_historial"] = False
+                st.success("¡Historial borrado exitosamente!")
+                st.rerun()
+        with col_b2:
+            if st.button("Cancelar"):
+                st.session_state["confirmar_borrado_historial"] = False
+                st.rerun()
+
+    st.markdown("---")
     st.subheader("Opciones de Descarga del Cuadro Maestro")
 
     col_dl1, col_dl2 = st.columns(2)
@@ -542,7 +573,33 @@ with tab_ruta_vendedores:
             vendedor_seleccionado = st.selectbox("Seleccionar Vendedor", vendedores_disponibles, key="filtro_vendedor_ruta")
             
         with col_f2:
-            semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"], key="filtro_semana_ruta")
+            # LÓGICA DE ADVERTENCIA PARA CAMBIO DE SEMANA
+            if "semana_anterior_activa" not in st.session_state:
+                st.session_state["semana_anterior_activa"] = "Semana 1"
+            if "pendiente_confirmacion_semana" not in st.session_state:
+                st.session_state["pendiente_confirmacion_semana"] = None
+
+            semana_elegida_ui = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"], key="filtro_semana_ruta")
+
+            if semana_elegida_ui != st.session_state["semana_anterior_activa"]:
+                st.session_state["pendiente_confirmacion_semana"] = semana_elegida_ui
+
+            if st.session_state["pendiente_confirmacion_semana"] is not None:
+                sem_destino = st.session_state["pendiente_confirmacion_semana"]
+                sem_origen = "Semana 1" if sem_destino == "Semana 2" else "Semana dos" # ajustado al texto requerido
+                st.warning(f"⚠️ Estamos en la **{st.session_state['semana_anterior_activa']}**, ¿estás seguro que quieres continuar con la **{sem_destino}**?")
+                col_w1, col_w2 = st.columns(2)
+                with col_w1:
+                    if st.button("Sí, cambiar semana"):
+                        st.session_state["semana_anterior_activa"] = sem_destino
+                        st.session_state["pendiente_confirmacion_semana"] = None
+                        st.rerun()
+                with col_w2:
+                    if st.button("Cancelar / Mantener"):
+                        st.session_state["pendiente_confirmacion_semana"] = None
+                        st.rerun()
+
+            semana_seleccionada = st.session_state["semana_anterior_activa"]
 
         with col_f3:
             dias_opciones = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -625,12 +682,64 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
+            # ====================================================
+            # ESTILO TIPO CHECKLIST VISUAL (FORMATO IMAGEN)
+            # ====================================================
+            st.markdown("---")
+            st.subheader(f"📋 Checklist de Visita - {dia_seleccionado} ({semana_seleccionada})")
+            st.markdown("Visualización en formato de tarjeta con casillas de verificación para marcar los clientes visitados en la ruta:")
+
+            with st.form("form_checklist_visual"):
+                # Encabezado visual estilo tabla con bordes limpios
+                st.markdown(
+                    f"""
+                    <div style="background-color: #2C5E3B; padding: 10px; border-radius: 5px; color: white; font-weight: bold; display: flex; text-align: center;">
+                        <div style="flex: 0.5;">#</div>
+                        <div style="flex: 4; text-align: left; padding-left: 10px;">CLIENTE</div>
+                        <div style="flex: 3; text-align: left;">UBICACIÓN</div>
+                        <div style="flex: 1;">VISITADO</div>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+
+                checkbox_estados = {}
+                for idx_c, row_c in df_filtrado.iterrows():
+                    nro_cli = row_c.get("Nro", "")
+                    nombre_cli = row_c.get("Cliente", "")
+                    ubicacion_cli = row_c.get("Ubicacion", "")
+                    
+                    # Verificar si ya estaba marcado en la visita de la semana actual
+                    estado_actual = True if str(row_c.get("Visita_S1", "")).lower() in ["sí", "si", "true"] else False
+
+                    col_num, col_nom, col_ubi, col_chk = st.columns([0.5, 4, 3, 1])
+                    with col_num:
+                        st.markdown(f"**{nro_cli}**")
+                    with col_nom:
+                        st.markdown(f"{nombre_cli}")
+                    with col_ubi:
+                        st.markdown(f"{ubicacion_cli}")
+                    with col_chk:
+                        checkbox_estados[idx_c] = st.checkbox("Visita", value=estado_actual, key=f"chk_visita_{idx_c}", label_visibility="collapsed")
+                    
+                    st.markdown("<hr style='margin: 4px 0px; border-color: #e0e0e0;'>", unsafe_allow_html=True)
+
+                guardar_checklist_btn = st.form_submit_button("✅ Guardar Estatus de Checklist", type="primary", use_container_width=True)
+
+                if guardar_checklist_btn:
+                    for orig_idx, visitado in checkbox_estados.items():
+                        val_str = "Sí" if visitado else "No"
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = val_str
+                    
+                    guardar_en_base_de_datos(st.session_state["df_clientes"])
+                    st.success("¡Checklist de visitas actualizado correctamente!")
+                    st.rerun()
+
             # SECCIÓN INFERIOR: Historial limpio con casilla selectora para desplegar el expediente y motivo detallado
             st.markdown("---")
             st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
             st.markdown("Selecciona la casilla correspondiente a un cliente para desplegar su expediente y motivo detallado por semana:")
 
-            # Preparar dataframe para el historial con columna de selección (checkbox)
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
@@ -669,7 +778,6 @@ with tab_ruta_vendedores:
                 }
             )
 
-            # Buscar cuáles clientes tienen la casilla "Ver Detalle" marcada
             clientes_seleccionados_checkbox = df_historial_editado[df_historial_editado["Ver Detalle"] == True]
 
             if not clientes_seleccionados_checkbox.empty:
@@ -680,7 +788,6 @@ with tab_ruta_vendedores:
                     nombre_cli = sel_row["Cliente"]
                     ubicacion_cli = sel_row["Ubicación"]
 
-                    # Encontrar los datos originales de este cliente en df_filtrado
                     match_orig = df_filtrado[(df_filtrado["Cliente"] == nombre_cli) & (df_filtrado["Ubicacion"] == ubicacion_cli)]
                     if not match_orig.empty:
                         c_data = match_orig.iloc[0]
