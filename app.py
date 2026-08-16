@@ -322,75 +322,72 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-# Renderizamos la tabla fuera del form para que actúe en tiempo real al cambiar de celda
-edited_df = st.data_editor(
-    st.session_state["df_clientes"],
-    num_rows="dynamic",
-    use_container_width=True,
-    key="editor_clientes",
-    column_config={
-        "Nro": st.column_config.NumberColumn("Nro", required=True),
-        "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-        "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
-        "Cliente": st.column_config.TextColumn("Cliente", required=True),
-        "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-        "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-        "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-        "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-        "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-        "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-        "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
-        "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-        "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-        "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-    },
-)
+# ENVOLVEMOS LA TABLA EN UN FORMULARIO: Esto evita el refresco molesto con cada clic o tecla
+with st.form("form_cuadro_maestro"):
+  edited_df = st.data_editor(
+      st.session_state["df_clientes"],
+      num_rows="dynamic",
+      use_container_width=True,
+      key="editor_clientes",
+      column_config={
+          "Nro": st.column_config.NumberColumn("Nro", required=True),
+          "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+          "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
+          "Cliente": st.column_config.TextColumn("Cliente", required=True),
+          "Ubicacion": st.column_config.TextColumn("Ubicacion"),
+          "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+          "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+          "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
+          "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+          "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+          "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+          "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+          "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+          "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+          "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+          "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+      },
+  )
 
-# Lógica de sincronización en tiempo real y autocompletado de rutas
-df_actualizado = edited_df.copy()
-if not df_actualizado.empty:
-  # Autocompletar la última fila si se añadió un nuevo registro heredando de la anterior
-  if len(df_actualizado) > len(st.session_state["df_clientes"]):
-    ultima_fila = df_actualizado.iloc[-1]
-    cliente_val = ultima_fila.get("Cliente", "")
-    if pd.isna(cliente_val) or str(cliente_val).strip() == "":
-      if len(df_actualizado) > 1:
-        fila_anterior = df_actualizado.iloc[-2].copy()
-        for col in df_actualizado.columns:
-          if col != "Cliente" and col != "Nro":
-            df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
-        try:
-          df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
-        except:
-          pass
+  submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
 
-  df_v = st.session_state["df_vendedores"]
-  df_m = st.session_state["df_mercaderistas"]
+  if submitted:
+    df = edited_df.copy()
+    if not df.empty:
+      # Heredar datos de la última fila si es nueva
+      if len(df) > 1:
+        ultima_fila = df.iloc[-1]
+        cliente_val = ultima_fila.get("Cliente", "")
+        if pd.isna(cliente_val) or str(cliente_val).strip() == "":
+          fila_anterior = df.iloc[-2].copy()
+          for col in df.columns:
+            if col != "Cliente" and col != "Nro":
+              df.at[df.index[-1], col] = fila_anterior[col]
+          try:
+            df.at[df.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
+          except:
+            pass
 
-  # Conectar automáticamente las rutas según el personal seleccionado
-  for idx, row in df_actualizado.iterrows():
-    vendedor_actual = row.get("Vendedor")
-    if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
-      match_v = df_v[df_v["Vendedor"] == vendedor_actual]
-      if not match_v.empty:
-        df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+      df_v = st.session_state["df_vendedores"]
+      df_m = st.session_state["df_mercaderistas"]
 
-    merc_actual = row.get("Mercaderista")
-    if pd.notna(merc_actual) and str(merc_actual).strip() != "":
-      match_m = df_m[df_m["Mercaderista"] == merc_actual]
-      if not match_m.empty:
-        df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+      # CONEXIÓN TOTAL Y ESTRICTA: Al presionar guardar, se asigna el número de ruta correspondiente al vendedor y mercaderista seleccionado
+      for idx, row in df.iterrows():
+        vendedor_actual = row.get("Vendedor")
+        if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
+          match_v = df_v[df_v["Vendedor"] == vendedor_actual]
+          if not match_v.empty:
+            df.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
 
-# Actualizar el session state para mantener los cambios sincronizados
-if not df_actualizado.equals(st.session_state["df_clientes"]):
-  st.session_state["df_clientes"] = df_actualizado
-  st.rerun()
+        merc_actual = row.get("Mercaderista")
+        if pd.notna(merc_actual) and str(merc_actual).strip() != "":
+          match_m = df_m[df_m["Mercaderista"] == merc_actual]
+          if not match_m.empty:
+            df.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
-if st.button("💾 Guardar Cambios en la Base de Datos", type="primary", use_container_width=True):
-  guardar_en_base_de_datos(st.session_state["df_clientes"])
-  st.rerun()
+    st.session_state["df_clientes"] = df
+    guardar_en_base_de_datos(df)
+    st.rerun()
 
 st.markdown("---")
 st.subheader("Opciones de Descarga del Cuadro Maestro")
