@@ -585,29 +585,32 @@ with tab_ruta_vendedores:
                 guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial (4 Semanas)", type="primary", use_container_width=True)
 
                 if guardar_ruta_btn:
+                    # Asegurar primero que todas las columnas de historial existan en el DataFrame principal
+                    for s_idx in [1, 2, 3, 4]:
+                        for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
+                            if c_field not in st.session_state["df_clientes"].columns:
+                                st.session_state["df_clientes"][c_field] = ""
+
                     for idx, row in df_editado_ruta.iterrows():
                         orig_idx = df_filtrado.index[df_editado_ruta.index.get_loc(idx)]
                         
                         # APLICANDO LÓGICA DE ROTACIÓN DE 4 SEMANAS (FIFO):
-                        # La semana más antigua (S4) se elimina, S3 pasa a S4, S2 pasa a S3, S1 pasa a S2, 
-                        # y los datos nuevos se guardan en S1.
-                        st.session_state["df_clientes"].at[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S3"]
-                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S4"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"]
 
-                        st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] # wait let's use S2 -> S3 properly as originally written
-                        st.session_state["df_clientes"].at[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S2"]
-                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S2"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S3"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S2"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S3"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"]
 
-                        st.session_state["df_clientes"].at[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].at[orig_idx, "Visita_S1"]
-                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].at[orig_idx, "Pedido_S1"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
                         # Guardar los datos ingresados actualmente en S1
-                        st.session_state["df_clientes"].at[orig_idx, "Visita_S1"] = row["Visita_S1"]
-                        st.session_state["df_clientes"].at[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
-                        st.session_state["df_clientes"].at[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"] = row["Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"] = row["Motivo_Pedido_S1"]
 
                     guardar_en_base_de_datos(st.session_state["df_clientes"])
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
