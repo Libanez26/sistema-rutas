@@ -170,17 +170,47 @@ if "df_clientes" not in st.session_state:
   else:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
-def guardar_todo_en_supabase():
+def aplicar_herencia_y_guardar():
+  # Actualizamos el dataframe con lo que el usuario editó en pantalla
+  df = st.session_state["editor_clientes"].copy()
+  
+  # Procesar herencia de filas nuevas y rutas de vendedores/mercaderistas
+  if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or str(df.iloc[-1]["Cliente"]).strip() == ""):
+    fila_anterior = df.iloc[-2].copy()
+    for col in df.columns:
+      if col != "Cliente" and col != "Nro":
+        df.at[df.index[-1], col] = fila_anterior[col]
+    df.at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
+
+  df_v = st.session_state["df_vendedores"]
+  df_m = st.session_state["df_mercaderistas"]
+
+  for idx, row in df.iterrows():
+    vendedor_actual = row["Vendedor"]
+    if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
+      match_v = df_v[df_v["Vendedor"] == vendedor_actual]
+      if not match_v.empty:
+        ruta_v = match_v.iloc[0]["Nro de Ruta"]
+        df.at[idx, "Nro de Ruta (Ventas)"] = ruta_v
+
+    merc_actual = row["Mercaderista"]
+    if pd.notna(merc_actual) and str(merc_actual).strip() != "":
+      match_m = df_m[df_m["Mercaderista"] == merc_actual]
+      if not match_m.empty:
+        ruta_m = match_m.iloc[0]["Nro de Ruta"]
+        df.at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
+
+  st.session_state["df_clientes"] = df
+
   if supabase:
     try:
-      # Guardar Clientes
-      df_to_save = st.session_state["df_clientes"].copy().fillna("")
+      df_to_save = df.copy().fillna("")
       df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
       supabase.table("clientes_rutas").delete().neq("Nro", -999999).execute()
       if not df_to_save.empty:
         supabase.table("clientes_rutas").insert(df_to_save.to_dict(orient="records")).execute()
 
-      # Guardar Vendedores y Mercaderistas en 'personal_rutas'
+      # Guardar Vendedores y Mercaderistas
       supabase.table("personal_rutas").delete().neq("id", -999999).execute()
       
       registros_personal = []
@@ -195,7 +225,7 @@ def guardar_todo_en_supabase():
       if registros_personal:
         supabase.table("personal_rutas").insert(registros_personal).execute()
 
-      st.toast("¡Todo sincronizado con Supabase correctamente!", icon="☁️")
+      st.success("¡Cambios guardados en la base de datos correctamente!")
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
@@ -264,7 +294,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
         st.session_state["df_clientes"] = nuevo_df
-        guardar_todo_en_supabase()
+        aplicar_herencia_y_guardar()
         st.success("¡Archivo Excel cargado y sincronizado en Supabase con éxito!")
       else:
         model = genai.GenerativeModel("gemini-2.5-flash")
@@ -287,7 +317,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
             df_ia[col] = ""
 
         st.session_state["df_clientes"] = df_ia[columnas_clientes]
-        guardar_todo_en_supabase()
+        aplicar_herencia_y_guardar()
         st.success("¡Datos del PDF extraídos y sincronizados en Supabase con éxito!")
     except Exception as e:
       st.error(f"Error al procesar el archivo: {e}")
@@ -317,8 +347,7 @@ with col_merc:
 if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
   st.session_state["df_vendedores"] = edited_vendedores
   st.session_state["df_mercaderistas"] = edited_mercaderistas
-  guardar_todo_en_supabase()
-  st.success("¡Cambios de personal actualizados y guardados en la nube!")
+  aplicar_herencia_y_guardar()
   st.rerun()
 
 st.markdown("---")
@@ -327,44 +356,14 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-def procesar_herencia():
-  df = st.session_state["df_clientes"]
-
-  if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""):
-    fila_anterior = df.iloc[-2].copy()
-    for col in df.columns:
-      if col != "Cliente" and col != "Nro":
-        st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
-    st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
-
-  df_v = st.session_state["df_vendedores"]
-  df_m = st.session_state["df_mercaderistas"]
-
-  for idx, row in df.iterrows():
-    vendedor_actual = row["Vendedor"]
-    if pd.notna(vendedor_actual) and vendedor_actual != "":
-      match_v = df_v[df_v["Vendedor"] == vendedor_actual]
-      if not match_v.empty:
-        ruta_v = match_v.iloc[0]["Nro de Ruta"]
-        if row["Nro de Ruta (Ventas)"] != ruta_v:
-          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Ventas)"] = ruta_v
-
-    merc_actual = row["Mercaderista"]
-    if pd.notna(merc_actual) and merc_actual != "":
-      match_m = df_m[df_m["Mercaderista"] == merc_actual]
-      if not match_m.empty:
-        ruta_m = match_m.iloc[0]["Nro de Ruta"]
-        if row["Nro de Ruta (Mercaderia)"] != ruta_m:
-          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
-
 df_actual = st.session_state["df_clientes"]
 
+# Renderizamos la tabla SIN el on_change para que no se recargue sola al escribir
 edited_df = st.data_editor(
     df_actual,
     num_rows="dynamic",
     use_container_width=True,
     key="editor_clientes",
-    on_change=procesar_herencia,
     column_config={
         "Nro": st.column_config.NumberColumn("Nro", required=True),
         "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
@@ -385,10 +384,12 @@ edited_df = st.data_editor(
     },
 )
 
+# Guardamos el estado temporal localmente mientras escribes, sin tocar Supabase ni refrescar
 st.session_state["df_clientes"] = edited_df
 
 if st.button("💾 Guardar Cambios en la Base de Datos", type="primary", use_container_width=True):
-  guardar_todo_en_supabase()
+  aplicar_herencia_y_guardar()
+  st.rerun()
 
 st.markdown("---")
 st.subheader("Opciones de Descarga del Cuadro Maestro")
