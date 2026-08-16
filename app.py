@@ -426,6 +426,18 @@ with tab_general:
     with col_dl2:
       def generar_pdf(df):
         buffer = io.BytesIO()
+        
+        # Columnas que deseas excluir del PDF
+        columnas_a_excluir = [
+            "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
+            "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
+            "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
+            "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
+        ]
+        
+        # Filtrar el DataFrame para remover las columnas del historial
+        df_pdf = df.drop(columns=[col for col in columnas_a_excluir if col in df.columns], errors="ignore")
+
         doc = SimpleDocTemplate(
             buffer, 
             pagesize=landscape(letter), 
@@ -468,14 +480,14 @@ with tab_general:
         )
 
         data = []
-        header_row = [Paragraph(str(col), header_style) for col in df.columns]
+        header_row = [Paragraph(str(col), header_style) for col in df_pdf.columns]
         data.append(header_row)
 
-        for _, row in df.iterrows():
+        for _, row in df_pdf.iterrows():
             row_data = [Paragraph(str(val), cell_style) for val in row.values]
             data.append(row_data)
 
-        col_widths = [25] * len(df.columns)
+        col_widths = [25] * len(df_pdf.columns)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
