@@ -615,23 +615,33 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
-            # SECCIÓN INFERIOR: Historial de visitas resumido por cliente (Sí/No)
+            # SECCIÓN INFERIOR: Historial de visitas resumido por cliente (Sí/No) sin filtros adicionales y organizado por S1, S2, S3, S4
             st.markdown("---")
-            st.subheader("📋 Historial de Visitas Anteriores (Últimas 4 Semanas)")
-            st.markdown("Selecciona un cliente para visualizar su estatus de visitas previo (Sí / No):")
+            st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
+            st.markdown("Resumen general del estatus histórico de los clientes en la ruta actual:")
 
-            clientes_nombres = df_filtrado["Cliente"].tolist()
-            cliente_seleccionado_hist = st.selectbox("Elegir Cliente para ver Historial", clientes_nombres, key="select_historial_cliente")
+            # Construir tabla consolidada para todos los clientes filtrados de la ruta
+            tabla_historial_data = []
+            for _, row_h in df_filtrado.iterrows():
+                tabla_historial_data.append({
+                    "Cliente": row_h.get("Cliente", ""),
+                    "S1": f"Visita: {row_h.get('Visita_S1', 'No')} | Pedido: {row_h.get('Pedido_S1', 'No')}",
+                    "S2": f"Visita: {row_h.get('Visita_S2', 'No')} | Pedido: {row_h.get('Pedido_S2', 'No')}",
+                    "S3": f"Visita: {row_h.get('Visita_S3', 'No')} | Pedido: {row_h.get('Pedido_S3', 'No')}",
+                    "S4": f"Visita: {row_h.get('Visita_S4', 'No')} | Pedido: {row_h.get('Pedido_S4', 'No')}",
+                })
 
-            if cliente_seleccionado_hist:
-                row_hist = df_filtrado[df_filtrado["Cliente"] == cliente_seleccionado_hist].iloc[0]
-                
-                hc1, hc2, hc3, hc4 = st.columns(4)
-                with hc1:
-                    st.metric("Semana Actual (S1)", row_hist.get("Visita_S1", "No registra"))
-                with hc2:
-                    st.metric("Semana Pasada (S2)", row_hist.get("Visita_S2", "No registra"))
-                with hc3:
-                    st.metric("Hace 3 Semanas (S3)", row_hist.get("Visita_S3", "No registra"))
-                with hc4:
-                    st.metric("Hace 4 Semanas (S4)", row_hist.get("Visita_S4", "No registra"))
+            df_tabla_historial = pd.DataFrame(tabla_historial_data)
+            
+            st.dataframe(
+                df_tabla_historial,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Cliente": st.column_config.TextColumn("Cliente"),
+                    "S1": st.column_config.TextColumn("Semana Actual (S1)"),
+                    "S2": st.column_config.TextColumn("Semana Pasada (S2)"),
+                    "S3": st.column_config.TextColumn("Hace 3 Semanas (S3)"),
+                    "S4": st.column_config.TextColumn("Hace 4 Semanas (S4)"),
+                }
+            )
