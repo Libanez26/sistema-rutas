@@ -487,7 +487,11 @@ with tab_general:
             row_data = [Paragraph(str(val), cell_style) for val in row.values]
             data.append(row_data)
 
-        col_widths = [25] * len(df_pdf.columns)
+        # Ancho total disponible en la hoja horizontal (letter landscape = 792 pt, menos márgenes 30 pt = 762 pt)
+        # Distribuimos el ancho total proporcionalmente entre las columnas de df_pdf
+        ancho_total_disponible = 762
+        num_columnas = len(df_pdf.columns)
+        col_widths = [ancho_total_disponible / num_columnas] * num_columnas
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
