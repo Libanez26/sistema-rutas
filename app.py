@@ -142,7 +142,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                 ])
                 json_text = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(json_text)
-                df_ia = pd.DataFrame(data)
+f = pd.DataFrame(data)
                 
                 for col in columnas_clientes:
                     if col not in df_ia.columns:
@@ -182,15 +182,40 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-# Función callback para heredar automáticamente los datos de la fila anterior al agregar una nueva
+# Función callback para heredar filas nuevas y autocompletar rutas según los catálogos superiores
 def procesar_herencia():
     df = st.session_state["df_clientes"]
+    
+    # 1. Herencia de nueva fila si el cliente está vacío
     if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""):
         fila_anterior = df.iloc[-2].copy()
         for col in df.columns:
             if col != "Cliente" and col != "Nro":
                 st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
         st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
+
+    # 2. Autocompletar ruta de Vendedor si este cambia
+    df_v = st.session_state["df_vendedores"]
+    df_m = st.session_state["df_mercaderistas"]
+    
+    for idx, row in df.iterrows():
+        # Autocompletar Ruta de Ventas
+        vendedor_actual = row["Vendedor"]
+        if pd.notna(vendedor_actual) and vendedor_actual != "":
+            match_v = df_v[df_v["Vendedor"] == vendedor_actual]
+            if not match_v.empty:
+                ruta_v = match_v.iloc[0]["Nro de Ruta"]
+                if row["Nro de Ruta (Ventas)"] != ruta_v:
+                    st.session_state["df_clientes"].at[idx, "Nro de Ruta (Ventas)"] = ruta_v
+        
+        # Autocompletar Ruta de Mercaderista
+        merc_actual = row["Mercaderista"]
+        if pd.notna(merc_actual) and merc_actual != "":
+            match_m = df_m[df_m["Mercaderista"] == merc_actual]
+            if not match_m.empty:
+                ruta_m = match_m.iloc[0]["Nro de Ruta"]
+                if row["Nro de Ruta (Mercaderia)"] != ruta_m:
+                    st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
 
 df_actual = st.session_state["df_clientes"]
 
@@ -209,7 +234,7 @@ edited_df = st.data_editor(
         "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
         "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
         "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24h", "48h"]),
+        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
         "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
         "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
         "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
