@@ -260,7 +260,8 @@ col_vend, col_merc = st.columns(2)
 
 with col_vend:
   st.subheader("Gestión de Vendedores")
-  st.session_state["df_vendedores"] = st.data_editor(
+  # Capturamos el resultado del editor en una variable temporal para evitar pérdida de foco inmediata
+  edited_vendedores = st.data_editor(
       st.session_state["df_vendedores"],
       num_rows="dynamic",
       use_container_width=True,
@@ -269,15 +270,17 @@ with col_vend:
 
 with col_merc:
   st.subheader("Gestión de Mercaderistas CCS")
-  st.session_state["df_mercaderistas"] = st.data_editor(
+  edited_mercaderistas = st.data_editor(
       st.session_state["df_mercaderistas"],
       num_rows="dynamic",
       use_container_width=True,
       key="editor_mercaderistas_inline",
   )
 
-# Botón para fijar los cambios de Vendedores y Mercaderistas sin perder el foco
+# Botón único para consolidar los cambios en el session_state de Vendedores y Mercaderistas
 if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
+  st.session_state["df_vendedores"] = edited_vendedores
+  st.session_state["df_mercaderistas"] = edited_mercaderistas
   st.success("¡Cambios de personal actualizados correctamente!")
 
 st.markdown("---")
