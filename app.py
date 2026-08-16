@@ -142,13 +142,15 @@ if "df_vendedores" not in st.session_state:
         raise Exception()
     except:
       st.session_state["df_vendedores"] = pd.DataFrame([
-          {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 01"},
-          {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
+          {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 01"},
+          {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 02"},
+          {"Vendedor": "Ventas Directas", "Nro de Ruta": "Ventas"},
       ])
   else:
     st.session_state["df_vendedores"] = pd.DataFrame([
-        {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 01"},
-        {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 02"},
+        {"Vendedor": "Jhony Moreno", "Nro de Ruta": "Ruta 01"},
+        {"Vendedor": "Dairo Bello", "Nro de Ruta": "Ruta 02"},
+        {"Vendedor": "Ventas Directas", "Nro de Ruta": "Ventas"},
     ])
 
 if "df_mercaderistas" not in st.session_state:
@@ -163,21 +165,12 @@ if "df_mercaderistas" not in st.session_state:
       st.session_state["df_mercaderistas"] = pd.DataFrame([
           {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
           {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
-          {"Mercaderista": "Armando", "Nro de Ruta": "Ruta M-03"},
       ])
   else:
     st.session_state["df_mercaderistas"] = pd.DataFrame([
         {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta": "Ruta M-01"},
         {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
-        {"Mercaderista": "Armando", "Nro de Ruta": "Ruta M-03"},
     ])
-
-# Diccionario de relación predeterminada (Vendedor -> Mercaderista por defecto)
-# Puedes ajustar esto según tus preferencias de asignación automática habituales.
-RELACION_VENDEDOR_MERCADERISTA = {
-    "Dairo Bello": {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta (Mercaderia)": "Ruta M-01"},
-    "Jhony Moreno": {"Mercaderista": "Yorsin Villanueva", "Nro de Ruta (Mercaderia)": "Ruta M-01"},
-}
 
 if "df_clientes" not in st.session_state:
   if supabase:
@@ -431,22 +424,26 @@ with tab_general:
             if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
               match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
               if not match_v.empty:
+                # Asignar automáticamente el Nro de Ruta correspondiente al vendedor
                 df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
-
-              # Lógica inteligente: Autocompletar mercaderista por defecto según el vendedor, 
-              # a menos que el usuario haya seleccionado o cambiado manualmente otro mercaderista en la tabla.
-              merc_actual_fila = row.get("Mercaderista")
-              if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
-                if str(vendedor_actual).strip() in RELACION_VENDEDOR_MERCADERISTA:
-                  def_merc = RELACION_VENDEDOR_MERCADERISTA[str(vendedor_actual).strip()]
-                  df_actualizado.at[idx, "Mercaderista"] = def_merc["Mercaderista"]
-                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = def_merc["Nro de Ruta (Mercaderia)"]
-              else:
-                # Si ya hay un mercaderista asignado (ya sea por defecto o cambiado manualmente a Armando, etc.),
-                # aseguramos que su Nro de Ruta de Mercadería coincida con el de ese mercaderista específico.
-                match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
-                if not match_m.empty:
-                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+                
+                # ASOCIACIÓN DINÁMICA POR FILA (ÍNDICE):
+                # La fila del vendedor vincula directamente con la misma posición en Mercaderistas CCS
+                pos_vendedor = match_v.index[0]
+                if pos_vendedor < len(df_m):
+                  mercaderista_asignado = df_m.iloc[pos_vendedor]["Mercaderista"]
+                  ruta_mercaderia_asignada = df_m.iloc[pos_vendedor]["Nro de Ruta"]
+                  
+                  # Si la celda de mercaderista está vacía, se autocompleta con el par de la misma fila
+                  merc_actual_fila = row.get("Mercaderista")
+                  if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
+                    df_actualizado.at[idx, "Mercaderista"] = mercaderista_asignado
+                    df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = ruta_mercaderia_asignada
+                  else:
+                    # Si el usuario seleccionó manualmente otro mercaderista, aseguramos que su ruta corresponda a ese
+                    match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
+                    if not match_m.empty:
+                      df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
         st.session_state["df_clientes"] = df_actualizado
         guardar_en_base_de_datos(df_actualizado)
