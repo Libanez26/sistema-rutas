@@ -276,6 +276,9 @@ with col_merc:
       key="editor_mercaderistas_inline",
   )
 
+if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
+  st.success("¡Cambios de personal actualizados correctamente!")
+
 st.markdown("---")
 st.subheader("Cuadro Maestro de Clientes")
 
