@@ -632,11 +632,11 @@ with tab_ruta_vendedores:
                 with col_b1:
                     guardar_ruta_btn = st.form_submit_button("💾 Guardar y Desplazar Historial", type="primary", use_container_width=True)
                 with col_b2:
-                    refrescar_historial_btn = st.form_submit_button("🔄 Refrescar Historial", use_container_width=True)
+                    Borrar_historial_btn = st.form_submit_button("🔄 Borrar Historial", use_container_width=True)
                 with col_b3:
                     generar_imagen_btn = st.form_submit_button("🖼️ Generar y Visualizar Imagen", use_container_width=True)
 
-                if guardar_ruta_btn or refrescar_historial_btn:
+                if guardar_ruta_btn or borrar_historial_btn:
                     for s_idx in [1, 2, 3, 4]:
                         for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
                             if c_field not in st.session_state["df_clientes"].columns:
