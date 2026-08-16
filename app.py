@@ -615,19 +615,20 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
-            # SECCIÓN INFERIOR: Historial limpio (Cliente, S1, S2, S3, S4 con Sí/No directo)
+            # SECCIÓN INFERIOR: Historial limpio y Detalle por cliente
             st.markdown("---")
-            st.subheader("📋 Historial de Visitas (Últimas 4 Semanas)")
-            st.markdown("Resumen general del estatus de visitas de los clientes en la ruta actual:")
+            st.subheader("📋 Historial de Visitas y Motivos de Pedido (Últimas 4 Semanas)")
+            st.markdown("Resumen general con la ubicación del cliente y desglose detallado por semana:")
 
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
                     "Cliente": row_h.get("Cliente", ""),
-                    "S1": row_h.get("Visita_S1", "No") if str(row_h.get("Visita_S1", "")).strip() != "" else "No",
-                    "S2": row_h.get("Visita_S2", "No") if str(row_h.get("Visita_S2", "")).strip() != "" else "No",
-                    "S3": row_h.get("Visita_S3", "No") if str(row_h.get("Visita_S3", "")).strip() != "" else "No",
-                    "S4": row_h.get("Visita_S4", "No") if str(row_h.get("Visita_S4", "")).strip() != "" else "No",
+                    "Ubicación": row_h.get("Ubicacion", ""),
+                    "S1 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S1', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S1', 'No') or 'No'}",
+                    "S2 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S2', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S2', 'No') or 'No'}",
+                    "S3 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S3', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S3', 'No') or 'No'}",
+                    "S4 (Visita | Pedido)": f"Visita: {row_h.get('Visita_S4', 'No') or 'No'} | Pedido: {row_h.get('Pedido_S4', 'No') or 'No'}",
                 })
 
             df_tabla_historial = pd.DataFrame(tabla_historial_data)
@@ -638,9 +639,25 @@ with tab_ruta_vendedores:
                 hide_index=True,
                 column_config={
                     "Cliente": st.column_config.TextColumn("Cliente"),
-                    "S1": st.column_config.TextColumn("S1"),
-                    "S2": st.column_config.TextColumn("S2"),
-                    "S3": st.column_config.TextColumn("S3"),
-                    "S4": st.column_config.TextColumn("S4"),
+                    "Ubicación": st.column_config.TextColumn("Ubicación"),
+                    "S1 (Visita | Pedido)": st.column_config.TextColumn("S1"),
+                    "S2 (Visita | Pedido)": st.column_config.TextColumn("S2"),
+                    "S3 (Visita | Pedido)": st.column_config.TextColumn("S3"),
+                    "S4 (Visita | Pedido)": st.column_config.TextColumn("S4"),
                 }
             )
+
+            st.markdown("---")
+            st.subheader("🔍 Motivo detallado por Cliente (Semana Actual)")
+            
+            clientes_nombres = df_filtrado["Cliente"].dropna().astype(str).tolist()
+            if clientes_nombres:
+                cliente_seleccionado_detalle = st.selectbox("Selecciona un cliente para ver el motivo del pedido (S1):", clientes_nombres, key="select_detalle_motivo")
+                
+                cliente_row = df_filtrado[df_filtrado["Cliente"].astype(str) == cliente_seleccionado_detalle]
+                if not cliente_row.empty:
+                    motivo_s1 = cliente_row.iloc[0].get("Motivo_Pedido_S1", "")
+                    ubicacion_cliente = cliente_row.iloc[0].get("Ubicacion", "")
+                    
+                    st.info(f"📍 **Ubicación:** {ubicacion_cliente if ubicacion_cliente else 'No especificada'}")
+                    st.success(f"📝 **Motivo del Pedido (Semana 1):** {motivo_s1 if motivo_s1 else 'No se registró ningún motivo para esta semana.'}")
