@@ -142,7 +142,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                 ])
                 json_text = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(json_text)
-f = pd.DataFrame(data)
+                df_ia = pd.DataFrame(data)
                 
                 for col in columnas_clientes:
                     if col not in df_ia.columns:
@@ -194,7 +194,7 @@ def procesar_herencia():
                 st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
         st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
 
-    # 2. Autocompletar ruta de Vendedor si este cambia
+    # 2. Autocompletar ruta de Vendedor y Mercaderista si cambian
     df_v = st.session_state["df_vendedores"]
     df_m = st.session_state["df_mercaderistas"]
     
