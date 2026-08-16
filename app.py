@@ -604,7 +604,7 @@ with tab_ruta_vendedores:
 
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"]
                         st.session_state["df_clientes"].loc[orig_idx, "Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Pedido_S1"]
-                        st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
+                        st.session_state["df_clientes"].loc[orig_idx, "Motiyo_Pedido_S2"] = st.session_state["df_clientes"].loc[orig_idx, "Motivo_Pedido_S1"]
 
                         # Guardar los datos ingresados en S1
                         st.session_state["df_clientes"].loc[orig_idx, "Visita_S1"] = row["Visita_S1"]
@@ -650,11 +650,18 @@ with tab_ruta_vendedores:
             st.markdown("---")
             st.subheader("🔍 Motivo detallado por Cliente (Semana Actual)")
             
-            clientes_nombres = df_filtrado["Cliente"].dropna().astype(str).tolist()
-            if clientes_nombres:
-                cliente_seleccionado_detalle = st.selectbox("Selecciona un cliente para ver el motivo del pedido (S1):", clientes_nombres, key="select_detalle_motivo")
+            # Crear una etiqueta única combinando el nombre del cliente y su ubicación para diferenciar duplicados
+            df_filtrado["Cliente_Display"] = df_filtrado["Cliente"].astype(str) + " — Ubicación: " + df_filtrado["Ubicacion"].astype(str)
+            clientes_opciones_display = df_filtrado["Cliente_Display"].tolist()
+
+            if clientes_opciones_display:
+                cliente_seleccionado_display = st.selectbox(
+                    "Selecciona el cliente y su ubicación para ver el detalle y motivo del pedido (S1):", 
+                    clientes_opciones_display, 
+                    key="select_detalle_motivo_ubicacion"
+                )
                 
-                cliente_row = df_filtrado[df_filtrado["Cliente"].astype(str) == cliente_seleccionado_detalle]
+                cliente_row = df_filtrado[df_filtrado["Cliente_Display"] == cliente_seleccionado_display]
                 if not cliente_row.empty:
                     motivo_s1 = cliente_row.iloc[0].get("Motivo_Pedido_S1", "")
                     ubicacion_cliente = cliente_row.iloc[0].get("Ubicacion", "")
