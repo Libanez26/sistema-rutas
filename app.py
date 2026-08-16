@@ -12,8 +12,6 @@ from supabase import create_client, Client
 # Configuración inicial de la página
 st.set_page_config(page_title="Gestión de Rutas - Lácteos Ananké", layout="wide")
 
-st.title("Sistema Integral de Gestión de Rutas - Lácteos Ananké")
-
 # Configurar API de Gemini
 if "GEMINI_API_KEY" in st.secrets:
   genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -21,7 +19,7 @@ else:
   st.error("Error: La API Key de Gemini no está configurada en los Secrets de Streamlit.")
 
 # ==========================================
-# CONEXIÓN A SUPABASE
+# CONEXIÓN A SUPABASE (Soporte flexible para formato plano o anidado)
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
@@ -29,40 +27,70 @@ def init_supabase() -> Client:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
+  elif "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
   return None
 
 supabase = init_supabase()
 
 # ==========================================
-# 1. ESTADOS DE SESIÓN Y LOGIN / SESIÓN DE USUARIO
+# GESTIÓN DE AUTENTICACIÓN (INICIAR SESIÓN / REGISTRARSE)
 # ==========================================
-
-# Sección de inicio de sesión integrada para evitar pérdidas de estado y asegurar persistencia por usuario
 if "usuario" not in st.session_state:
     st.session_state["usuario"] = None
 
 if st.session_state["usuario"] is None:
-    st.sidebar.subheader("🔑 Iniciar Sesión")
-    correo_input = st.sidebar.text_input("Correo electrónico")
-    password_input = st.sidebar.text_input("Contraseña", type="password")
+    st.title("🔑 Sistema Integral de Gestión de Rutas - Lácteos Ananké")
+    st.markdown("### Inicia sesión o regístrate para acceder a la plataforma.")
     
-    if st.sidebar.button("Entrar"):
-        if supabase:
-            try:
-                res = supabase.auth.sign_in_with_password({"email": correo_input, "password": password_input})
-                st.session_state["usuario"] = res.user
-                st.success("¡Sesión iniciada con éxito!")
-                st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"Error al iniciar sesión: {e}")
-        else:
-            st.sidebar.error("Supabase no está configurado correctamente.")
+    tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
+    
+    with tab_login:
+        st.subheader("Acceso a tu cuenta")
+        correo_login = st.text_input("Correo electrónico", key="correo_login")
+        password_login = st.text_input("Contraseña", type="password", key="pass_login")
+        
+        if st.button("Ingresar", type="primary"):
+            if supabase:
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": correo_login, "password": password_login})
+                    st.session_state["usuario"] = res.user
+                    st.success("¡Sesión iniciada con éxito!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al iniciar sesión: {e}")
+            else:
+                st.error("Supabase no está configurado correctamente en los Secrets.")
+                
+    with tab_registro:
+        st.subheader("Crear una cuenta nueva")
+        correo_reg = st.text_input("Correo electrónico", key="correo_reg")
+        password_reg = st.text_input("Contraseña", type="password", key="pass_reg")
+        
+        if st.button("Registrarse"):
+            if supabase:
+                try:
+                    res = supabase.auth.sign_up({"email": correo_reg, "password": password_reg})
+                    st.success("¡Registro exitoso! Por favor verifica tu correo o inicia sesión.")
+                except Exception as e:
+                    st.error(f"Error al registrarse: {e}")
+            else:
+                st.error("Supabase no está configurado correctamente en los Secrets.")
+                
     st.stop()
 else:
-    st.sidebar.write(f"Conectado como: {st.session_state['usuario'].email}")
+    # Barra lateral para mostrar el usuario conectado y cerrar sesión
+    st.sidebar.write(f"👤 Conectado como: **{st.session_state['usuario'].email}**")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["usuario"] = None
         st.rerun()
+
+# ==========================================
+# APLICACIÓN PRINCIPAL
+# ==========================================
+st.title("Sistema Integral de Gestión de Rutas - Lácteos Ananké")
 
 if "df_vendedores" not in st.session_state:
   st.session_state["df_vendedores"] = pd.DataFrame([
@@ -95,7 +123,7 @@ columnas_clientes = [
     "Día de Mercaderia Semana 2",
 ]
 
-# Cargar datos desde Supabase al iniciar (Ordenados para evitar que se pierdan o alteren)
+# Cargar datos desde Supabase al iniciar
 if "df_clientes" not in st.session_state:
   if supabase:
     try:
@@ -111,9 +139,7 @@ if "df_clientes" not in st.session_state:
             df_temp[col] = ""
         st.session_state["df_clientes"] = df_temp[columnas_clientes]
       else:
-        st.session_state["df_clientes"] = pd.DataFrame(
-            columns=columnas_clientes
-        )
+        st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
     except Exception as e:
       st.warning(f"Aviso de carga desde Supabase: {e}")
       st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
@@ -121,45 +147,26 @@ if "df_clientes" not in st.session_state:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
 
-# Función de guardado inteligente y robusta (Alineada al estándar de la app universitaria)
 def guardar_en_supabase():
-  if not st.session_state.get("usuario"):
-    return
-
   if supabase:
     try:
-      user_id = st.session_state["usuario"].id
-      correo = st.session_state["usuario"].email
-
       df_to_save = st.session_state["df_clientes"].copy()
       df_to_save = df_to_save.fillna("")
-      
-      # Solo enviar filas que tengan al menos el nombre del cliente escrito
-      df_to_save = df_to_save[
-          df_to_save["Cliente"].astype(str).str.strip() != ""
-      ]
+      df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
       records = df_to_save.to_dict(orient="records")
 
-      # Limpiar registros previos en la tabla y reinsertar los actuales
       supabase.table("clientes_ananke").delete().neq("Nro", -999999).execute()
 
       if records:
         supabase.table("clientes_ananke").insert(records).execute()
 
-      st.toast("¡Sincronizado y persistido con Supabase correctamente!", icon="☁️")
+      st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
     except Exception as e:
-      st.error(f"Error crítico al guardar en Supabase: {e}")
+      st.error(f"Error al guardar en Supabase: {e}")
 
-
-# ==========================================
-# INTERFAZ PRINCIPAL EN UNA SOLA VISTA
-# ==========================================
 
 st.header("Base de Datos General de Clientes y Rutas")
-st.markdown(
-    "Sube tu archivo Excel de rutas para cargar toda la información completa de"
-    " forma automática."
-)
+st.markdown("Sube tu archivo Excel de rutas para cargar toda la información completa de forma automática.")
 
 uploaded_file = st.file_uploader("Cargar archivo (PDF o Excel)", type=["pdf", "xlsx"])
 
@@ -168,10 +175,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
     try:
       if uploaded_file.name.endswith(".xlsx"):
         df_excel = pd.read_excel(uploaded_file)
-
-        df_excel.columns = (
-            df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
-        )
+        df_excel.columns = df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
 
         nuevo_df = pd.DataFrame()
         nuevo_df["Nro"] = range(1, len(df_excel) + 1)
@@ -223,13 +227,7 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
 
         for c in ["Semana 1", "Semana 2", "Mercaderia"]:
           if c in nuevo_df.columns:
-            nuevo_df[c] = nuevo_df[c].replace({
-                "Si": "Sí",
-                "si": "Sí",
-                "SI": "Sí",
-                "no": "No",
-                "NO": "No",
-            })
+            nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
         st.session_state["df_clientes"] = nuevo_df
         guardar_en_supabase()
@@ -244,14 +242,9 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                 """
         response = model.generate_content([
             prompt,
-            {
-                "mime_type": "application/pdf",
-                "data": uploaded_file.getvalue(),
-            },
+            {"mime_type": "application/pdf", "data": uploaded_file.getvalue()},
         ])
-        json_text = (
-            response.text.replace("```json", "").replace("```", "").strip()
-        )
+        json_text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(json_text)
         df_ia = pd.DataFrame(data)
 
@@ -267,7 +260,6 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
 
 st.markdown("---")
 
-# Sección superior para gestionar Vendedores y Mercaderistas
 col_vend, col_merc = st.columns(2)
 
 with col_vend:
@@ -291,30 +283,18 @@ with col_merc:
 st.markdown("---")
 st.subheader("Cuadro Maestro de Clientes")
 
-lista_vend_opciones = (
-    st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
-)
-lista_merc_opciones = (
-    st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
-)
+lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
+lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-
-# Función callback para heredar filas nuevas y autocompletar rutas
 def procesar_herencia():
   df = st.session_state["df_clientes"]
 
-  if len(df) > 1 and (
-      pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""
-  ):
+  if len(df) > 1 and (pd.isna(df.iloc[-1]["Cliente"]) or df.iloc[-1]["Cliente"] == ""):
     fila_anterior = df.iloc[-2].copy()
     for col in df.columns:
       if col != "Cliente" and col != "Nro":
-        st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[
-            col
-        ]
-    st.session_state["df_clientes"].at[df.index[-1], "Nro"] = (
-        fila_anterior["Nro"] + 1
-    )
+        st.session_state["df_clientes"].at[df.index[-1], col] = fila_anterior[col]
+    st.session_state["df_clientes"].at[df.index[-1], "Nro"] = fila_anterior["Nro"] + 1
 
   df_v = st.session_state["df_vendedores"]
   df_m = st.session_state["df_mercaderistas"]
@@ -326,9 +306,7 @@ def procesar_herencia():
       if not match_v.empty:
         ruta_v = match_v.iloc[0]["Nro de Ruta"]
         if row["Nro de Ruta (Ventas)"] != ruta_v:
-          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Ventas)"] = (
-              ruta_v
-          )
+          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Ventas)"] = ruta_v
 
     merc_actual = row["Mercaderista"]
     if pd.notna(merc_actual) and merc_actual != "":
@@ -336,10 +314,7 @@ def procesar_herencia():
       if not match_m.empty:
         ruta_m = match_m.iloc[0]["Nro de Ruta"]
         if row["Nro de Ruta (Mercaderia)"] != ruta_m:
-          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = (
-              ruta_m
-          )
-
+          st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
 
 df_actual = st.session_state["df_clientes"]
 
@@ -351,101 +326,52 @@ edited_df = st.data_editor(
     on_change=procesar_herencia,
     column_config={
         "Nro": st.column_config.NumberColumn("Nro", required=True),
-        "Vendedor": st.column_config.SelectboxColumn(
-            "Vendedor", options=lista_vend_opciones, required=False
-        ),
-        "Nro de Ruta (Ventas)": st.column_config.TextColumn(
-            "Nro de Ruta (Ventas)"
-        ),
+        "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+        "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
         "Cliente": st.column_config.TextColumn("Cliente", required=True),
         "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-        "Semana 1": st.column_config.SelectboxColumn(
-            "Semana 1", options=["Sí", "No"]
-        ),
-        "Semana 2": st.column_config.SelectboxColumn(
-            "Semana 2", options=["Sí", "No"]
-        ),
-        "Día de Visita Semana 1": st.column_config.TextColumn(
-            "Día Visita S1 (Ej. Lunes, Miércoles)"
-        ),
-        "Día de Visita Semana 2": st.column_config.TextColumn(
-            "Día Visita S2 (Ej. Martes, Jueves)"
-        ),
-        "Tiempo de Despacho": st.column_config.SelectboxColumn(
-            "Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]
-        ),
-        "Mercaderia": st.column_config.SelectboxColumn(
-            "Mercaderia", options=["Sí", "No"]
-        ),
-        "Mercaderista": st.column_config.SelectboxColumn(
-            "Mercaderista", options=lista_merc_opciones, required=False
-        ),
-        "Nro de Ruta (Mercaderia)": st.column_config.TextColumn(
-            "Nro de Ruta (Mercaderia)"
-        ),
-        "Tiempo de Mercaderia": st.column_config.SelectboxColumn(
-            "Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]
-        ),
-        "Día de Mercaderia Semana 1": st.column_config.TextColumn(
-            "Día Merc. S1"
-        ),
-        "Día de Mercaderia Semana 2": st.column_config.TextColumn(
-            "Día Merc. S2"
-        ),
+        "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+        "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+        "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1 (Ej. Lunes, Miércoles)"),
+        "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2 (Ej. Martes, Jueves)"),
+        "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+        "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+        "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+        "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+        "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+        "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+        "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
     },
 )
 
 st.session_state["df_clientes"] = edited_df
 
-# Botón explícito de guardado manual para asegurar persistencia permanente
-if st.button(
-    "💾 Guardar Cambios en la Base de Datos",
-    type="primary",
-    use_container_width=True,
-):
+if st.button("💾 Guardar Cambios en la Base de Datos", type="primary", use_container_width=True):
   guardar_en_supabase()
-
-# ==========================================
-# OPCIONES DE DESCARGA (EXCEL Y PDF)
-# ==========================================
 
 st.markdown("---")
 st.subheader("Opciones de Descarga del Cuadro Maestro")
 
 col_dl1, col_dl2 = st.columns(2)
 
-# 1. Botón para descargar en Excel
 with col_dl1:
   output_excel = io.BytesIO()
   with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
-    st.session_state["df_clientes"].to_excel(
-        writer, index=False, sheet_name="Base de Datos"
-    )
+    st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Base de Datos")
   excel_data = output_excel.getvalue()
 
   st.download_button(
       label="📥 Descargar en Formato Excel (.xlsx)",
       data=excel_data,
       file_name="Cuadro_Maestro_Rutas_Ananke.xlsx",
-      mime=(
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      ),
+      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       use_container_width=True,
   )
 
-# 2. Botón para descargar en PDF
 with col_dl2:
-
   def generar_pdf(df):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(letter),
-        rightMargin=20,
-        leftMargin=20,
-        topMargin=20,
-        bottomMargin=20,
-    )
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     elements = []
 
     styles = getSampleStyleSheet()
@@ -458,11 +384,7 @@ with col_dl2:
         alignment=1,
     )
 
-    elements.append(
-        Paragraph(
-            "Cuadro Maestro de Clientes y Rutas - Lácteos Ananké", title_style
-        )
-    )
+    elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas - Lácteos Ananké", title_style))
     elements.append(Spacer(1, 10))
 
     df_str = df.astype(str)
@@ -489,7 +411,6 @@ with col_dl2:
     buffer.seek(0)
     return buffer.getvalue()
 
-
   if not st.session_state["df_clientes"].empty:
     pdf_data = generar_pdf(st.session_state["df_clientes"])
     st.download_button(
@@ -500,8 +421,4 @@ with col_dl2:
         use_container_width=True,
     )
   else:
-    st.button(
-        "📄 Descargar en Formato PDF (Vacío)",
-        disabled=True,
-        use_container_width=True,
-    )
+    st.button("📄 Descargar en Formato PDF (Vacío)", disabled=True, use_container_width=True)
