@@ -615,20 +615,19 @@ with tab_ruta_vendedores:
                     st.success("¡Estatus guardado! El historial rotativo de 4 semanas se ha actualizado correctamente.")
                     st.rerun()
 
-            # SECCIÓN INFERIOR: Historial de visitas resumido por cliente (Sí/No) sin filtros adicionales y organizado por S1, S2, S3, S4
+            # SECCIÓN INFERIOR: Historial limpio (Cliente, S1, S2, S3, S4 con Sí/No directo)
             st.markdown("---")
-            st.subheader("📋 Historial de Visitas y Pedidos (Últimas 4 Semanas)")
-            st.markdown("Resumen general del estatus histórico de los clientes en la ruta actual:")
+            st.subheader("📋 Historial de Visitas (Últimas 4 Semanas)")
+            st.markdown("Resumen general del estatus de visitas de los clientes en la ruta actual:")
 
-            # Construir tabla consolidada para todos los clientes filtrados de la ruta
             tabla_historial_data = []
             for _, row_h in df_filtrado.iterrows():
                 tabla_historial_data.append({
                     "Cliente": row_h.get("Cliente", ""),
-                    "S1": f"Visita: {row_h.get('Visita_S1', 'No')} | Pedido: {row_h.get('Pedido_S1', 'No')}",
-                    "S2": f"Visita: {row_h.get('Visita_S2', 'No')} | Pedido: {row_h.get('Pedido_S2', 'No')}",
-                    "S3": f"Visita: {row_h.get('Visita_S3', 'No')} | Pedido: {row_h.get('Pedido_S3', 'No')}",
-                    "S4": f"Visita: {row_h.get('Visita_S4', 'No')} | Pedido: {row_h.get('Pedido_S4', 'No')}",
+                    "S1": row_h.get("Visita_S1", "No") if str(row_h.get("Visita_S1", "")).strip() != "" else "No",
+                    "S2": row_h.get("Visita_S2", "No") if str(row_h.get("Visita_S2", "")).strip() != "" else "No",
+                    "S3": row_h.get("Visita_S3", "No") if str(row_h.get("Visita_S3", "")).strip() != "" else "No",
+                    "S4": row_h.get("Visita_S4", "No") if str(row_h.get("Visita_S4", "")).strip() != "" else "No",
                 })
 
             df_tabla_historial = pd.DataFrame(tabla_historial_data)
@@ -639,9 +638,9 @@ with tab_ruta_vendedores:
                 hide_index=True,
                 column_config={
                     "Cliente": st.column_config.TextColumn("Cliente"),
-                    "S1": st.column_config.TextColumn("Semana Actual (S1)"),
-                    "S2": st.column_config.TextColumn("Semana Pasada (S2)"),
-                    "S3": st.column_config.TextColumn("Hace 3 Semanas (S3)"),
-                    "S4": st.column_config.TextColumn("Hace 4 Semanas (S4)"),
+                    "S1": st.column_config.TextColumn("S1"),
+                    "S2": st.column_config.TextColumn("S2"),
+                    "S3": st.column_config.TextColumn("S3"),
+                    "S4": st.column_config.TextColumn("S4"),
                 }
             )
