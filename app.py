@@ -163,7 +163,7 @@ with col_vend:
     )
 
 with col_merc:
-    st.subheader("Gestión de Mercaderistas")
+    st.subheader("Gestión de Mercaderistas CCS")
     st.session_state["df_mercaderistas"] = st.data_editor(
         st.session_state["df_mercaderistas"],
         num_rows="dynamic",
