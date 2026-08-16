@@ -861,7 +861,7 @@ with tab_ruta_vendedores:
                             detalle_semanas_rows = [
                                 {"Semana": "Semana 1 (Actual)", "Visita": c_data.get("Visita_S1", "No"), "Pedido": c_data.get("Pedido_S1", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S1", "Sin observaciones")},
                                 {"Semana": "Semana 2", "Visita": c_data.get("Visita_S2", "No"), "Pedido": c_data.get("Pedido_S2", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S2", "Sin observaciones")},
-                                {"Semana", "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
+                                {"Semana": "Semana 3", "Visita": c_data.get("Visita_S3", "No"), "Pedido": c_data.get("Pedido_S3", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S3", "Sin observaciones")},
                                 {"Semana": "Semana 4", "Visita": c_data.get("Visita_S4", "No"), "Pedido": c_data.get("Pedido_S4", "No"), "Motivo / Observación": c_data.get("Motivo_Pedido_S4", "Sin observaciones")},
                             ]
                             
