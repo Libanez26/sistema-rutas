@@ -7,6 +7,7 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from supabase import create_client, Client
 
 # Configuración inicial de la página
 st.set_page_config(page_title="Gestión de Rutas - Lácteos Ananké", layout="wide")
@@ -18,6 +19,19 @@ if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
     st.error("Error: La API Key de Gemini no está configurada en los Secrets de Streamlit.")
+
+# ==========================================
+# CONEXIÓN A SUPABASE
+# ==========================================
+@st.cache_resource
+def init_supabase() -> Client:
+    if "supabase" in st.secrets:
+        url = st.secrets["supabase"]["url"]
+        key = st.secrets["supabase"]["key"]
+        return create_client(url, key)
+    return None
+
+supabase = init_supabase()
 
 # ==========================================
 # 1. ESTADOS DE SESIÓN (CATÁLOGOS Y BASE DE DATOS)
@@ -54,8 +68,51 @@ columnas_clientes = [
     "Día de Mercaderia Semana 2"
 ]
 
+# Cargar datos desde Supabase al iniciar
 if "df_clientes" not in st.session_state:
-    st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
+    if supabase:
+        try:
+            response = supabase.table("clientes_ananke").select("*").execute()
+            data_db = response.data
+            if data_db:
+                df_temp = pd.DataFrame(data_db)
+                # Eliminar columna id si viene de la base de datos para evitar conflictos
+                if "id" in df_temp.columns:
+                    df_temp = df_temp.drop(columns=["id"])
+                
+                for col in columnas_clientes:
+                    if col not in df_temp.columns:
+                        df_temp[col] = ""
+                st.session_state["df_clientes"] = df_temp[columnas_clientes]
+            else:
+                st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
+        except Exception as e:
+            st.warning(f"Aviso de carga desde Supabase: {e}")
+            st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
+    else:
+        st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
+
+# Función segura para guardar en Supabase (Borra e inserta todo el bloque actualizado)
+def guardar_en_supabase():
+    if supabase:
+        try:
+            df_to_save = st.session_state["df_clientes"].copy()
+            df_to_save = df_to_save.fillna("")
+            
+            # Solo enviar filas que tengan al menos el nombre del cliente escrito
+            df_to_save = df_to_save[df_to_save["Cliente"].astype(str).str.strip() != ""]
+            
+            records = df_to_save.to_dict(orient="records")
+            
+            # Limpiar registros previos en la tabla y reinsertar los actuales
+            supabase.table("clientes_ananke").delete().neq("Nro", -999999).execute()
+            
+            if records:
+                supabase.table("clientes_ananke").insert(records).execute()
+                
+            st.toast("¡Sincronizado con Supabase correctamente!", icon="☁️")
+        except Exception as e:
+            st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
 # INTERFAZ PRINCIPAL EN UNA SOLA VISTA
@@ -127,7 +184,8 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                         nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
                 st.session_state["df_clientes"] = nuevo_df
-                st.success("¡Archivo Excel cargado con todos sus datos y columnas correctamente!")
+                guardar_en_supabase()
+                st.success("¡Archivo Excel cargado y sincronizado en Supabase con éxito!")
             else:
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""
@@ -149,7 +207,8 @@ if uploaded_file and st.button("Procesar y Organizar con IA"):
                         df_ia[col] = ""
                         
                 st.session_state["df_clientes"] = df_ia[columnas_clientes]
-                st.success("¡Datos del PDF extraídos correctamente!")
+                guardar_en_supabase()
+                st.success("¡Datos del PDF extraídos y sincronizados en Supabase con éxito!")
         except Exception as e:
             st.error(f"Error al procesar el archivo: {e}")
 
@@ -182,7 +241,7 @@ st.subheader("Cuadro Maestro de Clientes")
 lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
 lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
 
-# Función callback para heredar filas nuevas y autocompletar rutas según los catálogos superiores
+# Función callback para heredar filas nuevas, autocompletar rutas y guardar en Supabase
 def procesar_herencia():
     df = st.session_state["df_clientes"]
     
@@ -199,7 +258,6 @@ def procesar_herencia():
     df_m = st.session_state["df_mercaderistas"]
     
     for idx, row in df.iterrows():
-        # Autocompletar Ruta de Ventas
         vendedor_actual = row["Vendedor"]
         if pd.notna(vendedor_actual) and vendedor_actual != "":
             match_v = df_v[df_v["Vendedor"] == vendedor_actual]
@@ -208,7 +266,6 @@ def procesar_herencia():
                 if row["Nro de Ruta (Ventas)"] != ruta_v:
                     st.session_state["df_clientes"].at[idx, "Nro de Ruta (Ventas)"] = ruta_v
         
-        # Autocompletar Ruta de Mercaderista
         merc_actual = row["Mercaderista"]
         if pd.notna(merc_actual) and merc_actual != "":
             match_m = df_m[df_m["Mercaderista"] == merc_actual]
@@ -216,6 +273,9 @@ def procesar_herencia():
                 ruta_m = match_m.iloc[0]["Nro de Ruta"]
                 if row["Nro de Ruta (Mercaderia)"] != ruta_m:
                     st.session_state["df_clientes"].at[idx, "Nro de Ruta (Mercaderia)"] = ruta_m
+
+    # 3. Sincronizar cambios automáticamente con Supabase
+    guardar_en_supabase()
 
 df_actual = st.session_state["df_clientes"]
 
@@ -232,8 +292,8 @@ edited_df = st.data_editor(
         "Ubicacion": st.column_config.TextColumn("Ubicacion"),
         "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
         "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-        "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1"),
-        "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2"),
+        "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1 (Ej. Lunes, Miércoles)"),
+        "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2 (Ej. Martes, Jueves)"),
         "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
         "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
         "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
