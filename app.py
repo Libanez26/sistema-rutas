@@ -219,7 +219,15 @@ def guardar_en_base_de_datos(df):
       st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
-# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO (EXCLUYENDO SÁBADOS Y DOMINGOS)
+# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO ESPECÍFICA
+# Reglas personalizadas para Jueves y Viernes (cambio de semana):
+# - Jueves Semana 1 (48h) -> Lunes Semana 2
+# - Viernes Semana 1 (24h) -> Lunes Semana 2
+# - Viernes Semana 1 (48h) -> Martes Semana 2
+# - Jueves Semana 2 (48h) -> Lunes Semana 1
+# - Viernes Semana 2 (24h) -> Lunes Semana 1
+# - Viernes Semana 2 (48h) -> Martes Semana 1
+# Resto de días: cálculo normal de días hábiles dentro de la misma semana.
 # ==========================================
 def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_despacho):
     if not dia_visita_str or pd.isna(dia_visita_str) or str(dia_visita_str).strip() in ["", "nan", "None", "No asignado"]:
@@ -251,12 +259,26 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
         if d_limpio in ["sábado", "domingo"]:
             continue
 
+        # Reglas especiales de cambio de semana solicitadas
+        sig_semana = "Semana 2" if semana_actual == "Semana 1" else "Semana 1"
+
+        if d_limpio == "jueves":
+            if saltos_habiles >= 2: # 48 horas
+                resultados_despacho.append(f"Lunes ({sig_semana})")
+                continue
+        elif d_limpio == "viernes":
+            if saltos_habiles == 1: # 24 horas
+                resultados_despacho.append(f"Lunes ({sig_semana})")
+                continue
+            elif saltos_habiles >= 2: # 48 horas
+                resultados_despacho.append(f"Martes ({sig_semana})")
+                continue
+
         idx_actual = dias_habiles.index(d_limpio)
         idx_nuevo = idx_actual + saltos_habiles
         
         if idx_nuevo >= len(dias_habiles):
             idx_nuevo = idx_nuevo % len(dias_habiles)
-            sig_semana = "Semana 2" if semana_actual == "Semana 1" else "Semana 1"
             dia_nombre = dias_habiles[idx_nuevo].capitalize()
             resultados_despacho.append(f"{dia_nombre} ({sig_semana})")
         else:
@@ -910,88 +932,104 @@ with tab_ruta_vendedores:
                             st.markdown("---")
 
 # ==========================================
-# PESTAÑA: RUTA DE DESPACHO (EXCLUYENDO SÁBADOS Y DOMINGOS)
+# PESTAÑA: RUTA DE DESPACHO
 # ==========================================
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
-    st.markdown("Visualización enfocada exclusivamente en el equipo de despachadores, calculando el día exacto de entrega según el tiempo de despacho (24 o 48 horas) **saltando fines de semana (sábados y domingos)**.")
+    st.markdown("Visualización enfocada exclusivamente en el equipo de despachadores, calculando el día exacto de entrega según las reglas especiales de despacho y filtrando estrictamente por la semana seleccionada.")
 
     df_despachos = st.session_state["df_clientes"].copy()
     
     if df_despachos.empty:
         st.info("No hay clientes registrados en la base de datos.")
     else:
-        col_filtro_v, col_filtro_sem = st.columns(2)
-        vendedores_opciones = ["Todos"] + sorted(list(set(df_despachos["Vendedor"].dropna().astype(str)) - {"_"}))
-        
-        with col_filtro_v:
-            vendedor_filtro_esp = st.selectbox("Filtrar por Vendedor", vendedores_opciones, key="filtro_vendedor_despacho")
-        with col_filtro_sem:
-            semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
-
-        df_despachos_filtrado = df_despachos.copy()
-        if vendedor_filtro_esp != "Todos":
-            df_despachos_filtrado = df_despachos_filtrado[df_despachos_filtrado["Vendedor"].astype(str).str.strip() == vendedor_filtro_esp.strip()]
+        # Se elimina el filtro de vendedor (dejando solo el selector de semana de referencia)
+        semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
 
         datos_vista_despacho = []
-        col_visita_seleccionada = "Día de Visita Semana 1" if semana_filtro_esp == "Semana 1" else "Día de Visita Semana 2"
 
-        for _, r in df_despachos_filtrado.iterrows():
+        # Recorremos cada cliente evaluando tanto su visita en Semana 1 como en Semana 2
+        # para determinar qué cae exactamente en la 'semana_filtro_esp' elegida.
+        for _, r in df_despachos.iterrows():
             cliente_val = r.get("Cliente", "No aplica")
             ubicacion_val = r.get("Ubicacion", "No aplica")
             tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
-            dia_visita_actual = r.get(col_visita_seleccionada, "")
             
-            dia_despacho_calculado = calcular_despacho_por_dia_y_semana(dia_visita_actual, semana_filtro_esp, tiempo_desp)
-            
-            datos_vista_despacho.append({
-                "Cliente": cliente_val if pd.notna(cliente_val) and str(cliente_val).strip() != "" else "No aplica",
-                "Ubicación": ubicacion_val if pd.notna(ubicacion_val) and str(ubicacion_val).strip() != "" else "No aplica",
-                "Tiempo de Despacho": tiempo_desp if pd.notna(tiempo_desp) and str(tiempo_desp).strip() != "" else "24 HORAS",
-                "Día de Despacho": dia_despacho_calculado
-            })
+            # Revisar origen Semana 1
+            dia_v_s1 = r.get("Día de Visita Semana 1", "")
+            if dia_v_s1 and str(dia_v_s1).strip() not in ["", "nan", "None", "No asignado"]:
+                desp_s1 = calcular_despacho_por_dia_y_semana(dia_v_s1, "Semana 1", tiempo_desp)
+                sub_desps = [d.strip() for d in str(desp_s1).split(",")]
+                for d_item in sub_desps:
+                    # Verificamos si este despacho específico cae en la semana seleccionada por el usuario
+                    if f"({semana_filtro_esp})" in d_item:
+                        dia_limpio = d_item.split("(")[0].strip()
+                        datos_vista_despacho.append({
+                            "Cliente": cliente_val if pd.notna(cliente_val) and str(cliente_val).strip() != "" else "No aplica",
+                            "Ubicación": ubicacion_val if pd.notna(ubicacion_val) and str(ubicacion_val).strip() != "" else "No aplica",
+                            "Tiempo de Despacho": tiempo_desp if pd.notna(tiempo_desp) and str(tiempo_desp).strip() != "" else "24 HORAS",
+                            "Día de Despacho": f"{dia_limpio} ({semana_filtro_esp})"
+                        })
+
+            # Revisar origen Semana 2
+            dia_v_s2 = r.get("Día de Visita Semana 2", "")
+            if dia_v_s2 and str(dia_v_s2).strip() not in ["", "nan", "None", "No asignado"]:
+                desp_s2 = calcular_despacho_por_dia_y_semana(dia_v_s2, "Semana 2", tiempo_desp)
+                sub_desps2 = [d.strip() for d in str(desp_s2).split(",")]
+                for d_item in sub_desps2:
+                    if f"({semana_filtro_esp})" in d_item:
+                        dia_limpio = d_item.split("(")[0].strip()
+                        datos_vista_despacho.append({
+                            "Cliente": cliente_val if pd.notna(cliente_val) and str(cliente_val).strip() != "" else "No aplica",
+                            "Ubicación": ubicacion_val if pd.notna(ubicacion_val) and str(ubicacion_val).strip() != "" else "No aplica",
+                            "Tiempo de Despacho": tiempo_desp if pd.notna(tiempo_desp) and str(tiempo_desp).strip() != "" else "24 HORAS",
+                            "Día de Despacho": f"{dia_limpio} ({semana_filtro_esp})"
+                        })
 
         df_tabla_despacho_final = pd.DataFrame(datos_vista_despacho)
 
-        def generar_pdf_matriz_despacho(df_todos_original, vendedor_filtro, semana_filtro):
+        def generar_pdf_matriz_despacho(df_todos_original, semana_filtro):
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
             elements = []
             styles = getSampleStyleSheet()
 
             title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=12, textColor=colors.HexColor("#1f4e78"), spaceAfter=8, alignment=1)
-            section_style = ParagraphStyle("SectionStyle", parent=styles["Heading2"], fontSize=10, textColor=colors.HexColor("#2C5E3B"), spaceBefore=6, spaceAfter=4, alignment=0)
-            
             cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=6, leading=7.5, alignment=1)
             header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], fontSize=6.5, leading=8, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
             
             dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
-            titulo_vendedor_txt = f"TODOS LOS VENDEDORES" if vendedor_filtro == "Todos" else f"VENDEDOR: {vendedor_filtro.upper()}"
-            elements.append(Paragraph(f"RUTAS DE DESPACHO - {semana_filtro.upper()} ({titulo_vendedor_txt})", title_style))
-
-            df_subset = df_todos_original.copy()
-            if vendedor_filtro != "Todos":
-                df_subset = df_subset[df_subset["Vendedor"].astype(str).str.strip() == vendedor_filtro.strip()]
-
-            col_dia_campo = "Día de Visita Semana 1" if semana_filtro == "Semana 1" else "Día de Visita Semana 2"
+            elements.append(Paragraph(f"RUTAS DE DESPACHO - {semana_filtro.upper()}", title_style))
 
             matriz_dias = {dia: [] for dia in dias_semana}
             
-            for _, r_row in df_subset.iterrows():
+            for _, r_row in df_todos_original.iterrows():
                 tiempo_desp = r_row.get("Tiempo de Despacho", "24 HORAS")
-                dia_v_val = r_row.get(col_dia_campo, "")
-                
-                dia_desp_calc = calcular_despacho_por_dia_y_semana(dia_v_val, semana_filtro, tiempo_desp)
                 cli_nombre = str(r_row.get("Cliente", ""))
                 cli_ubi = str(r_row.get("Ubicacion", ""))
-                
-                sub_despachos = [d.strip() for d in str(dia_desp_calc).split(",")]
-                for d_esp in sub_despachos:
-                    d_limpio = normalizar_dia(d_esp.split("(")[0].strip())
-                    if d_limpio in matriz_dias and cli_nombre and cli_nombre.lower() != "nan":
-                        texto_celda = f"{cli_nombre} - {cli_ubi}" if cli_ubi and cli_ubi.lower() != "nan" else cli_nombre
-                        matriz_dias[d_limpio].append(texto_celda)
+
+                # Evaluar S1
+                dia_v_s1 = r_row.get("Día de Visita Semana 1", "")
+                if dia_v_s1 and str(dia_v_s1).strip() not in ["", "nan", "None", "No asignado"]:
+                    desp_s1 = calcular_despacho_por_dia_y_semana(dia_v_s1, "Semana 1", tiempo_desp)
+                    for d_esp in [d.strip() for d in str(desp_s1).split(",")]:
+                        if f"({semana_filtro})" in d_esp:
+                            d_limpio = normalizar_dia(d_esp.split("(")[0].strip())
+                            if d_limpio in matriz_dias and cli_nombre and cli_nombre.lower() != "nan":
+                                texto_celda = f"{cli_nombre} - {cli_ubi}" if cli_ubi and cli_ubi.lower() != "nan" else cli_nombre
+                                matriz_dias[d_limpio].append(texto_celda)
+
+                # Evaluar S2
+                dia_v_s2 = r_row.get("Día de Visita Semana 2", "")
+                if dia_v_s2 and str(dia_v_s2).strip() not in ["", "nan", "None", "No asignado"]:
+                    desp_s2 = calcular_despacho_por_dia_y_semana(dia_v_s2, "Semana 2", tiempo_desp)
+                    for d_esp in [d.strip() for d in str(desp_s2).split(",")]:
+                        if f"({semana_filtro})" in d_esp:
+                            d_limpio = normalizar_dia(d_esp.split("(")[0].strip())
+                            if d_limpio in matriz_dias and cli_nombre and cli_nombre.lower() != "nan":
+                                texto_celda = f"{cli_nombre} - {cli_ubi}" if cli_ubi and cli_ubi.lower() != "nan" else cli_nombre
+                                matriz_dias[d_limpio].append(texto_celda)
 
             max_filas = max([len(v) for v in matriz_dias.values()] or [1])
             
@@ -1024,7 +1062,7 @@ with tab_ruta_despacho:
 
         col_dl_desp_1, col_dl_desp_2 = st.columns([2, 3])
         with col_dl_desp_1:
-            pdf_bytes_despacho = generar_pdf_matriz_despacho(df_despachos, vendedor_filtro_esp, semana_filtro_esp)
+            pdf_bytes_despacho = generar_pdf_matriz_despacho(df_despachos, semana_filtro_esp)
             st.download_button(
                 label=f"📥 Descargar PDF Ruta de Despacho",
                 data=pdf_bytes_despacho,
@@ -1035,14 +1073,17 @@ with tab_ruta_despacho:
 
         st.markdown("---")
 
-        st.dataframe(
-            df_tabla_despacho_final,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
-                "Ubicación": st.column_config.TextColumn("Ubicación", width="medium"),
-                "Tiempo de Despacho": st.column_config.TextColumn("Tiempo de Despacho", width="small"),
-                "Día de Despacho": st.column_config.TextColumn("🚀 Día de Despacho (Hábiles)", width="medium"),
-            }
-        )
+        if df_tabla_despacho_final.empty:
+            st.info(f"No hay despachos programados para la **{semana_filtro_esp}** con los criterios actuales.")
+        else:
+            st.dataframe(
+                df_tabla_despacho_final,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
+                    "Ubicación": st.column_config.TextColumn("Ubicación", width="medium"),
+                    "Tiempo de Despacho": st.column_config.TextColumn("Tiempo de Despacho", width="small"),
+                    "Día de Despacho": st.column_config.TextColumn("🚀 Día de Despacho (Hábiles)", width="medium"),
+                }
+            )
