@@ -1,6 +1,10 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
+# Asegurar que el directorio raíz del proyecto esté en el path de Python
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
 
 import streamlit as st
 from services.supabase_service import supabase, cargar_datos_maestros, guardar_todo_en_supabase
