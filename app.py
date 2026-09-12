@@ -24,14 +24,25 @@ else:
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
-  if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
-    url = st.secrets["SUPABASE_URL"].strip()
-    for sufijo in ["/rest/v1/", "/rest/v1", "/"]:
-      if url.endswith(sufijo):
-        url = url[: -len(sufijo)].strip()
-    key = st.secrets["SUPABASE_KEY"].strip()
-    return create_client(url, key)
-  return None
+    if "SUPABASE_URL" not in st.secrets:
+        st.error("Falta la variable SUPABASE_URL en los Secrets.")
+        return None
+    if "SUPABASE_KEY" not in st.secrets:
+        st.error("Falta la variable SUPABASE_KEY en los Secrets.")
+        return None
+    
+    try:
+        url = st.secrets["SUPABASE_URL"].strip()
+        for sufijo in ["/rest/v1/", "/rest/v1", "/"]:
+            if url.endswith(sufijo):
+                url = url[: -len(sufijo)].strip()
+        key = st.secrets["SUPABASE_KEY"].strip()
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Error al conectar con Supabase: {e}")
+        return None
+
+supabase = init_supabase()
 
 supabase = init_supabase()
 
