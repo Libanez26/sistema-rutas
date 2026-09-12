@@ -1,6 +1,6 @@
 streamlit
 pandas
 openpyxl
+supabase
 google-generativeai
 reportlab
-supabase
