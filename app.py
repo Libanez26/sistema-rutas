@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
 import streamlit as st
 from services.supabase_service import supabase, cargar_datos_maestros, guardar_todo_en_supabase
 from views import cuadro_maestro, vendedores, despachos
