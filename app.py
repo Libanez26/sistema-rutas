@@ -219,15 +219,7 @@ def guardar_en_base_de_datos(df):
       st.error(f"Error al guardar en Supabase: {e}")
 
 # ==========================================
-# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO ESPECÍFICA (CORREGIDA PARA TODOS LOS DÍAS)
-# Reglas personalizadas para Jueves y Viernes (cambio de semana):
-# - Jueves Semana 1 (48h) -> Lunes Semana 2
-# - Viernes Semana 1 (24h) -> Lunes Semana 2
-# - Viernes Semana 1 (48h) -> Martes Semana 2
-# - Jueves Semana 2 (48h) -> Lunes Semana 1
-# - Viernes Semana 2 (24h) -> Lunes Semana 1
-# - Viernes Semana 2 (48h) -> Martes Semana 1
-# Resto de días: cálculo normal de días hábiles dentro de la misma semana.
+# LÓGICA DE CÁLCULO DE DÍAS DE DESPACHO ESPECÍFICA
 # ==========================================
 def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_despacho):
     if not dia_visita_str or pd.isna(dia_visita_str) or str(dia_visita_str).strip() in ["", "nan", "None", "No asignado"]:
@@ -261,30 +253,27 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
 
         sig_semana = "Semana 2" if semana_actual == "Semana 1" else "Semana 1"
 
-        # Reglas especiales de cambio de semana solicitadas para Jueves y Viernes
         if d_limpio == "jueves":
-            if saltos_habiles >= 2: # 48 horas
+            if saltos_habiles >= 2:
                 resultados_despacho.append(f"Lunes ({sig_semana})")
                 continue
         elif d_limpio == "viernes":
-            if saltos_habiles == 1: # 24 horas
+            if saltos_habiles == 1:
                 resultados_despacho.append(f"Lunes ({sig_semana})")
                 continue
-            elif saltos_habiles >= 2: # 48 horas
+            elif saltos_habiles >= 2:
                 resultados_despacho.append(f"Martes ({sig_semana})")
                 continue
 
         idx_actual = dias_habiles.index(d_limpio)
         idx_nuevo = idx_actual + saltos_habiles
         
-        # Si el salto se pasa del viernes, cae en la siguiente semana
         if idx_nuevo >= len(dias_habiles):
             idx_nuevo = idx_nuevo % len(dias_habiles)
             dia_nombre = dias_habiles[idx_nuevo].capitalize()
             resultados_despacho.append(f"{dia_nombre} ({sig_semana})")
         else:
             dia_nombre = dias_habiles[idx_nuevo].capitalize()
-            # IMPORTANTE: Mantener explícitamente la misma semana de referencia si se queda dentro de ella
             resultados_despacho.append(f"{dia_nombre} ({semana_actual})")
 
     if not resultados_despacho:
@@ -441,82 +430,83 @@ with tab_general:
 
     df_general_visible = st.session_state["df_clientes"][columnas_para_mostrar_general].copy()
 
-    with st.form("form_cuadro_maestro"):
-      edited_df_visible = st.data_editor(
-          df_general_visible,
-          num_rows="dynamic",
-          use_container_width=True,
-          key="editor_clientes_general",
-          hide_index=True,
-          column_config={
-              "Nro": st.column_config.NumberColumn("Nro", required=True),
-              "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
-              "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
-              "Cliente": st.column_config.TextColumn("Cliente", required=True),
-              "Ubicacion": st.column_config.TextColumn("Ubicacion"),
-              "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-              "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1 (Ej: Lunes, Jueves)"),
-              "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2 (Ej: Lunes, Jueves)"),
-              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
-              "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-              "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
-              "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
-              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
-              "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
-              "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
-          },
-      )
+    # CORRECCIÓN: Se eliminó el st.form que impedía el funcionamiento de num_rows="dynamic"
+    edited_df_visible = st.data_editor(
+        df_general_visible,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_clientes_general",
+        hide_index=True,
+        column_config={
+            "Nro": st.column_config.NumberColumn("Nro", required=True),
+            "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones, required=False),
+            "Nro de Ruta (Ventas)": st.column_config.TextColumn("Nro de Ruta (Ventas)"),
+            "Cliente": st.column_config.TextColumn("Cliente", required=True),
+            "Ubicacion": st.column_config.TextColumn("Ubicacion"),
+            "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+            "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+            "Día de Visita Semana 1": st.column_config.TextColumn("Día Visita S1 (Ej: Lunes, Jueves)"),
+            "Día de Visita Semana 2": st.column_config.TextColumn("Día Visita S2 (Ej: Lunes, Jueves)"),
+            "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS", "24h", "48h"]),
+            "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+            "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones, required=False),
+            "Nro de Ruta (Mercaderia)": st.column_config.TextColumn("Nro de Ruta (Mercaderia)"),
+            "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS", "48h", "72h"]),
+            "Día de Mercaderia Semana 1": st.column_config.TextColumn("Día Merc. S1"),
+            "Día de Mercaderia Semana 2": st.column_config.TextColumn("Día Merc. S2"),
+        },
+    )
 
-      submitted = st.form_submit_button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True)
+    if st.button("💾 Guardar y Conectar Rutas en la Base de Datos", type="primary", use_container_width=True):
+      df_actualizado = st.session_state["df_clientes"].copy()
+      
+      for col in edited_df_visible.columns:
+        if col in df_actualizado.columns:
+            df_actualizado = df_actualizado.drop(columns=[col])
+      df_actualizado = pd.concat([df_actualizado, edited_df_visible], axis=1)
+      df_actualizado = df_actualizado.loc[:, ~df_actualizado.columns.duplicated()]
 
-      if submitted:
-        df_actualizado = st.session_state["df_clientes"].copy()
-        
-        for col in edited_df_visible.columns:
-          df_actualizado[col] = edited_df_visible[col]
+      if not df_actualizado.empty:
+        if len(df_actualizado) > 1:
+          ultima_fila = df_actualizado.iloc[-1]
+          cliente_val = ultima_fila.get("Cliente", "")
+          if pd.isna(cliente_val) or str(cliente_val).strip() == "":
+            fila_anterior = df_actualizado.iloc[-2].copy()
+            for col in df_actualizado.columns:
+              if col != "Cliente" and col != "Nro":
+                df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
+            try:
+              df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
+            except:
+              pass
 
-        if not df_actualizado.empty:
-          if len(df_actualizado) > 1:
-            ultima_fila = df_actualizado.iloc[-1]
-            cliente_val = ultima_fila.get("Cliente", "")
-            if pd.isna(cliente_val) or str(cliente_val).strip() == "":
-              fila_anterior = df_actualizado.iloc[-2].copy()
-              for col in df_actualizado.columns:
-                if col != "Cliente" and col != "Nro":
-                  df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
-              try:
-                df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
-              except:
-                pass
+        df_v = st.session_state["df_vendedores"]
+        df_m = st.session_state["df_mercaderistas"]
 
-          df_v = st.session_state["df_vendedores"]
-          df_m = st.session_state["df_mercaderistas"]
-
-          for idx, row in df_actualizado.iterrows():
-            vendedor_actual = row.get("Vendedor")
-            if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
-              match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
-              if not match_v.empty:
-                df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+        for idx, row in df_actualizado.iterrows():
+          vendedor_actual = row.get("Vendedor")
+          if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
+            match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
+            if not match_v.empty:
+              df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+              
+              pos_vendedor = match_v.index[0]
+              if pos_vendedor < len(df_m):
+                mercaderista_asignado = df_m.iloc[pos_vendedor]["Mercaderista"]
+                ruta_mercaderia_asignada = df_m.iloc[pos_vendedor]["Nro de Ruta"]
                 
-                pos_vendedor = match_v.index[0]
-                if pos_vendedor < len(df_m):
-                  mercaderista_asignado = df_m.iloc[pos_vendedor]["Mercaderista"]
-                  ruta_mercaderia_asignada = df_m.iloc[pos_vendedor]["Nro de Ruta"]
-                  
-                  merc_actual_fila = row.get("Mercaderista")
-                  if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
-                    df_actualizado.at[idx, "Mercaderista"] = mercaderista_asignado
-                    df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = ruta_mercaderia_asignada
-                  else:
-                    match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
-                    if not match_m.empty:
-                      df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
+                merc_actual_fila = row.get("Mercaderista")
+                if pd.isna(merc_actual_fila) or str(merc_actual_fila).strip() == "":
+                  df_actualizado.at[idx, "Mercaderista"] = mercaderista_asignado
+                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = ruta_mercaderia_asignada
+                else:
+                  match_m = df_m[df_m["Mercaderista"].astype(str).str.strip() == str(merc_actual_fila).strip()]
+                  if not match_m.empty:
+                    df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = match_m.iloc[0]["Nro de Ruta"]
 
-        st.session_state["df_clientes"] = df_actualizado
-        guardar_en_base_de_datos(df_actualizado)
-        st.rerun()
+      st.session_state["df_clientes"] = df_actualizado
+      guardar_en_base_de_datos(df_actualizado)
+      st.rerun()
 
     st.markdown("---")
     st.subheader("Opciones de Descarga del Cuadro Maestro")
@@ -638,7 +628,7 @@ with tab_ruta_vendedores:
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
         elif diferencia_dias > 10 and semana_seleccionada == semana_anterior_reg:
-            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y not avanzar?")
+            st.warning(f"⚠️ Han pasado varios días y sigues en la **{semana_seleccionada}**. ¿Seguro que quieres mantener esta semana y no avanzar?")
             if st.button("Sí, confirmar"):
                 st.session_state["historial_semana_previa"] = {"semana": semana_seleccionada, "fecha": fecha_gestion}
                 st.rerun()
@@ -945,7 +935,6 @@ with tab_ruta_despacho:
     if df_despachos.empty:
         st.info("No hay clientes registrados en la base de datos.")
     else:
-        # Selector de semana de referencia (se eliminó el botón/selector de vendedor)
         semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
 
         datos_vista_despacho = []
@@ -955,7 +944,6 @@ with tab_ruta_despacho:
             ubicacion_val = r.get("Ubicacion", "No aplica")
             tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
             
-            # Revisar origen Semana 1
             dia_v_s1 = r.get("Día de Visita Semana 1", "")
             if dia_v_s1 and str(dia_v_s1).strip() not in ["", "nan", "None", "No asignado"]:
                 desp_s1 = calcular_despacho_por_dia_y_semana(dia_v_s1, "Semana 1", tiempo_desp)
@@ -970,7 +958,6 @@ with tab_ruta_despacho:
                             "Día de Despacho": f"{dia_limpio} ({semana_filtro_esp})"
                         })
 
-            # Revisar origen Semana 2
             dia_v_s2 = r.get("Día de Visita Semana 2", "")
             if dia_v_s2 and str(dia_v_s2).strip() not in ["", "nan", "None", "No asignado"]:
                 desp_s2 = calcular_despacho_por_dia_y_semana(dia_v_s2, "Semana 2", tiempo_desp)
@@ -1008,7 +995,6 @@ with tab_ruta_despacho:
                 cli_nombre = str(r_row.get("Cliente", ""))
                 cli_ubi = str(r_row.get("Ubicacion", ""))
 
-                # Evaluar S1
                 dia_v_s1 = r_row.get("Día de Visita Semana 1", "")
                 if dia_v_s1 and str(dia_v_s1).strip() not in ["", "nan", "None", "No asignado"]:
                     desp_s1 = calcular_despacho_por_dia_y_semana(dia_v_s1, "Semana 1", tiempo_desp)
@@ -1019,7 +1005,6 @@ with tab_ruta_despacho:
                                 texto_celda = f"{cli_nombre} - {cli_ubi}" if cli_ubi and cli_ubi.lower() != "nan" else cli_nombre
                                 matriz_dias[d_limpio].append(texto_celda)
 
-                # Evaluar S2
                 dia_v_s2 = r_row.get("Día de Visita Semana 2", "")
                 if dia_v_s2 and str(dia_v_s2).strip() not in ["", "nan", "None", "No asignado"]:
                     desp_s2 = calcular_despacho_por_dia_y_semana(dia_v_s2, "Semana 2", tiempo_desp)
