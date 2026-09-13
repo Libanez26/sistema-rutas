@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from supabase import create_client, Client
 
 # Configuración inicial de la página
-st.set_page_config(page_title="Gestión de Rutas - Sistema Avanzado", layout="wide")
+st.set_page_config(page_title="Gestión Integral de Rutas", layout="wide")
 
 # ==========================================
 # GESTIÓN AVANZADA DE IA Y MANEJO DE ERRORES (REINTENTOS)
@@ -48,7 +48,6 @@ def llamar_gemini_con_reintentos(prompt, pdf_bytes=None, max_intentos=3):
                 if response and response.text:
                     return response.text
             except Exception as e:
-                # Si falla con un modelo o intento, pasa al siguiente de forma silenciosa
                 time.sleep(1)
                 continue
                 
@@ -58,10 +57,6 @@ def llamar_gemini_con_reintentos(prompt, pdf_bytes=None, max_intentos=3):
 # CONTROL DE ESTADO GLOBAL (st.session_state)
 # ==========================================
 def inicializar_estado_global():
-    """
-    Estructuras modulares para el control y limpieza de variables de sesión,
-    permitiendo sincronización fluida entre vistas sin pérdida de información.
-    """
     if "usuario" not in st.session_state:
         st.session_state["usuario"] = None
     if "dispositivo_confianza" not in st.session_state:
@@ -108,15 +103,16 @@ def normalizar_dia(dia):
     return mapping.get(d, str(dia).strip().capitalize())
 
 # ==========================================
-# AUTENTICACIÓN Y PERSISTENCIA DE SESIÓN
+# GESTIÓN DE AUTENTICACIÓN
 # ==========================================
 if st.session_state["usuario"] is None:
     st.title("🔑 Sistema Integral de Gestión de Rutas")
-    st.markdown("### Inicia sesión o regístrate para acceder de forma persistente.")
+    st.markdown("### Inicia sesión o regístrate para acceder a la plataforma.")
     
     tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
     
     with tab_login:
+        st.subheader("Acceso a tu cuenta")
         correo_login = st.text_input("Correo electrónico", key="correo_login")
         password_login = st.text_input("Contraseña", type="password", key="pass_login")
         recordar_dispositivo = st.checkbox("Confiar en este dispositivo (Mantener sesión persistente)", value=True)
@@ -132,9 +128,10 @@ if st.session_state["usuario"] is None:
                 except Exception as e:
                     st.error(f"Error al iniciar sesión: {e}")
             else:
-                st.error("Supabase no está configurado en los Secrets.")
+                st.error("Supabase no está configurado correctamente en los Secrets.")
                 
     with tab_registro:
+        st.subheader("Crear una cuenta nueva")
         correo_reg = st.text_input("Correo electrónico", key="correo_reg")
         password_reg = st.text_input("Contraseña", type="password", key="pass_reg")
         
@@ -156,7 +153,7 @@ else:
         st.rerun()
 
 # ==========================================
-# APLICACIÓN PRINCIPAL Y CARGA DE DATOS
+# APLICACIÓN PRINCIPAL
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
@@ -296,16 +293,16 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
 
     return ", ".join(resultados_despacho) if resultados_despacho else "No asignado"
 
-# ==========================================
-# PESTAÑAS DE NAVEGACIÓN
-# ==========================================
+# Pestañas de la aplicación
 tab_general, tab_ruta_vendedores, tab_ruta_despacho = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores", "📦 Ruta de Despacho"])
 
 with tab_general:
     st.header("Base de Datos General de Clientes y Rutas")
+    st.markdown("Sube tu archivo Excel o PDF para procesar la información de forma automatizada mediante IA con reintentos.")
+
     uploaded_file = st.file_uploader("Cargar archivo (PDF o Excel)", type=["pdf", "xlsx"])
 
-    if uploaded_file and st.button("Procesar y Organizar con IA (Múltiples Modelos y Reintentos)"):
+    if uploaded_file and st.button("Procesar y Organizar con IA"):
       with st.spinner("Leyendo documento con soporte de IA avanzado..."):
         try:
           if uploaded_file.name.endswith(".xlsx"):
@@ -341,10 +338,10 @@ with tab_general:
     col_vend, col_merc = st.columns(2)
     with col_vend:
       st.subheader("Vendedores")
-      edited_vendedores = st.data_editor(st.session_state["df_vendedores"], num_rows="dynamic", use_container_width=True, key="ed_vend", hide_index=True)
+      edited_vendedores = st.data_editor(st.session_state["df_vendedores"], num_rows="dynamic", use_container_width=True, key="editor_vendedores_inline", hide_index=True)
     with col_merc:
       st.subheader("Mercaderistas CCS")
-      edited_mercaderistas = st.data_editor(st.session_state["df_mercaderistas"], num_rows="dynamic", use_container_width=True, key="ed_merc", hide_index=True)
+      edited_mercaderistas = st.data_editor(st.session_state["df_mercaderistas"], num_rows="dynamic", use_container_width=True, key="editor_mercaderistas_inline", hide_index=True)
 
     if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
       st.session_state["df_vendedores"] = edited_vendedores
@@ -363,37 +360,78 @@ with tab_general:
     ]
     df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c not in columnas_excluir_vista_general]].copy()
 
-    edited_df_visible = st.data_editor(
-        df_general_visible, num_rows="dynamic", use_container_width=True, key="editor_clientes_general", hide_index=True,
-        column_config={
-            "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
-            "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
-            "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-            "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
-            "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
-            "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
-            "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
-        }
-    )
+    # Uso de st.form integrado para evitar recargas constantes por cada celda editada
+    with st.form("form_cuadro_maestro"):
+      edited_df_visible = st.data_editor(
+          df_general_visible, num_rows="dynamic", use_container_width=True, key="editor_clientes_general", hide_index=True,
+          column_config={
+              "Nro": st.column_config.NumberColumn("Nro", required=True),
+              "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
+              "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
+              "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
+              "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
+              "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
+              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
+          }
+      )
 
-    if st.button("💾 Guardar y Sincronizar en la Base de Datos", type="primary", use_container_width=True):
-      df_actualizado = st.session_state["df_clientes"].copy()
-      for col in edited_df_visible.columns:
-        if col in df_actualizado.columns:
-            df_actualizado = df_actualizado.drop(columns=[col])
-      df_actualizado = pd.concat([df_actualizado, edited_df_visible], axis=1)
-      df_actualizado = df_actualizado.loc[:, ~df_actualizado.columns.duplicated()]
-      st.session_state["df_clientes"] = df_actualizado
-      guardar_en_base_de_datos(df_actualizado)
-      st.rerun()
+      submitted = st.form_submit_button("💾 Guardar y Sincronizar en la Base de Datos", type="primary", use_container_width=True)
 
-    # Opciones Avanzadas de Renderizado y Exportación (HTML estilizado y PDF descargable)
+      if submitted:
+        df_actualizado = st.session_state["df_clientes"].copy()
+        for col in edited_df_visible.columns:
+          df_actualizado[col] = edited_df_visible[col]
+
+        if not df_actualizado.empty:
+          if len(df_actualizado) > 1:
+            ultima_fila = df_actualizado.iloc[-1]
+            cliente_val = ultima_fila.get("Cliente", "")
+            if pd.isna(cliente_val) or str(cliente_val).strip() == "":
+              fila_anterior = df_actualizado.iloc[-2].copy()
+              for col in df_actualizado.columns:
+                if col != "Cliente" and col != "Nro":
+                  df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
+              try:
+                df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
+              except:
+                pass
+
+          df_v = st.session_state["df_vendedores"]
+          df_m = st.session_state["df_mercaderistas"]
+
+          for idx, row in df_actualizado.iterrows():
+            vendedor_actual = row.get("Vendedor")
+            if pd.notna(vendedor_actual) and str(vendedor_actual).strip() != "":
+              match_v = df_v[df_v["Vendedor"].astype(str).str.strip() == str(vendedor_actual).strip()]
+              if not match_v.empty:
+                df_actualizado.at[idx, "Nro de Ruta (Ventas)"] = match_v.iloc[0]["Nro de Ruta"]
+                pos_vendedor = match_v.index[0]
+                if pos_vendedor < len(df_m):
+                  df_actualizado.at[idx, "Mercaderista"] = df_m.iloc[pos_vendedor]["Mercaderista"]
+                  df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = df_m.iloc[pos_vendedor]["Nro de Ruta"]
+
+        st.session_state["df_clientes"] = df_actualizado
+        guardar_en_base_de_datos(df_actualizado)
+        st.rerun()
+
     st.markdown("---")
-    st.subheader("📥 Generación de Reportes y Exportación Avanzada (HTML y PDF)")
+    st.subheader("📥 Opciones de Descarga y Reportes Avanzados")
     
-    col_dl1, col_dl2 = st.columns(2)
+    col_dl1, col_dl2, col_dl3 = st.columns(3)
     with col_dl1:
-      # Exportación estructurada a HTML estilizado con redirección simulada/renderizado directo
+      output_excel = io.BytesIO()
+      with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
+        st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Base de Datos")
+      st.download_button(
+          label="📥 Descargar Excel (.xlsx)",
+          data=output_excel.getvalue(),
+          file_name="Cuadro_Maestro_Rutas.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          use_container_width=True,
+      )
+
+    with col_dl2:
       html_content = st.session_state["df_clientes"].to_html(classes="table table-striped table-bordered", index=False)
       st.download_button(
           label="🌐 Exportar a HTML Estilizado",
@@ -403,7 +441,7 @@ with tab_general:
           use_container_width=True
       )
 
-    with col_dl2:
+    with col_dl3:
       def generar_pdf_general(df):
         buffer = io.BytesIO()
         df_pdf = df.drop(columns=[col for col in columnas_excluir_vista_general if col in df.columns], errors="ignore").fillna("No aplica")
@@ -433,7 +471,7 @@ with tab_general:
         return buffer.getvalue()
 
       st.download_button(
-          label="📄 Descargar Planilla en Formato PDF",
+          label="📄 Descargar en Formato PDF",
           data=generar_pdf_general(st.session_state["df_clientes"]),
           file_name="Cuadro_Maestro_Rutas.pdf",
           mime="application/pdf",
