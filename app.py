@@ -435,14 +435,16 @@ with tab_general:
     col_dl1, col_dl2 = st.columns(2)
 
     with col_dl1:
-        # Generación de Reporte HTML Integrado (Visualización directa sin descarga obligatoria)
         if st.button("🌐 Ver Reporte HTML en Pantalla", use_container_width=True):
             html_content = f"""
             
             
                 Reporte de Cuadro Maestro
-
-                🖨️ Guardar como PDF / Imprimir
+                
+            
+            
+Cuadro Maestro de Clientes y Rutas
+            🖨️ Guardar como PDF / Imprimir
             {st.session_state["df_clientes"].head(50).to_html(index=False)}
         
         
@@ -460,6 +462,9 @@ with col_dl2:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
+with tab_ruta_vendedores:
+st.header("Seguimiento de Ruta de Vendedores")
+df_seguimiento = st.session_state["df_clientes"].copy()
 
 for s_idx in [1, 2, 3, 4]:
     for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
@@ -519,8 +524,14 @@ if vendedores_disponibles:
                 guardar_en_base_de_datos(st.session_state["df_clientes"])
                 st.success("¡Estatus guardado y historial desplazado correctamente!")
                 st.rerun()
+with tab_ruta_despacho:
+st.header("📦 Ruta de Despacho (Logística de Entrega)")
+df_despachos = st.session_state["df_clientes"].copy()
+if not df_despachos.empty:
+semana_filtro_esp = st.selectbox("Semana de Referencia", ["Semana 1", "Semana 2"], key="filtro_semana_despacho")
+datos_vista_despacho = []
 
-          for _, r in df_despachos.iterrows():
+    for _, r in df_despachos.iterrows():
         cliente_val = r.get("Cliente", "No aplica")
         ubicacion_val = r.get("Ubicacion", "No aplica")
         tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
