@@ -140,14 +140,13 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# GENERACIÓN DE REPORTES EN HTML ESTILIZADO
+# GENERACIÓN DE REPORTES EN HTML ESTILIZADO Y PDF PROFESIONAL
 # ==========================================
 def generar_html_rutas_vendedor(df_rutas, vendedor_seleccionado=None):
     df_f = df_rutas.copy()
     if vendedor_seleccionado:
         df_f = df_f[df_f["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
     
-    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo
     cols_excluir = [c for c in df_f.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
     df_f = df_f.drop(columns=[c for c in cols_excluir if c in df_f.columns]).fillna("")
 
@@ -204,6 +203,78 @@ def generar_html_rutas_vendedor(df_rutas, vendedor_seleccionado=None):
     </html>
     """
     return html_code
+
+def generar_pdf_rutas_vendedor(df_rutas, vendedor_seleccionado=None):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+    
+    elementos = []
+    styles = getSampleStyleSheet()
+    
+    estilo_titulo = ParagraphStyle(
+        'TituloReporte',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=6,
+        alignment=1
+    )
+    
+    estilo_sub = ParagraphStyle(
+        'SubReporte',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#4b5563'),
+        spaceAfter=15,
+        alignment=1
+    )
+    
+    titulo = f"Reporte Logístico de Rutas: {vendedor_seleccionado}" if vendedor_seleccionado else "Reporte Logístico de Rutas - Todos los Vendedores"
+    elementos.append(Paragraph(titulo, estilo_titulo))
+    elementos.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", estilo_sub))
+    elementos.append(Spacer(1, 10))
+    
+    df_f = df_rutas.copy()
+    if vendedor_seleccionado:
+        df_f = df_f[df_f["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
+        
+    cols_excluir = [c for c in df_f.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
+    df_f = df_f.drop(columns=[c for c in cols_excluir if c in df_f.columns]).fillna("")
+    
+    if df_f.empty:
+        elementos.append(Paragraph("No hay registros para mostrar con los filtros seleccionados.", styles['Normal']))
+    else:
+        headers = list(df_f.columns)
+        data = [[Paragraph(f"<b>{h}</b>", styles['Normal']) for h in headers]]
+        
+        for _, row in df_f.iterrows():
+            data.append([Paragraph(str(val), styles['Normal']) for val in row])
+            
+        tabla_pdf = Table(data, repeatRows=1)
+        tabla_pdf.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('TOPPADDING', (0, 0), (-1, 0), 6),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        elementos.append(tabla_pdf)
+        
+    doc.build(elementos)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -749,30 +820,49 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico en HTML)")
+    st.subheader("📥 Descarga de Reportes Logísticos (HTML y PDF)")
     
     col_dl_1, col_dl_2 = st.columns(2)
     
     with col_dl_1:
-        # Descarga Ruta Todos los Vendedores en HTML estilizado
+        st.markdown("##### 🌐 Reportes en Formato HTML")
         html_todos = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=None)
         st.download_button(
-            label="📥 Descargar Ruta Todos los Vendedores (.html)",
+            label="📥 Descargar Ruta Todos (HTML)",
             data=html_todos,
-            file_name="Ruta_Todos_Vendedores_Formato_Logistico.html",
+            file_name="Ruta_Todos_Vendedores.html",
+            mime="text/html",
+            use_container_width=True
+        )
+        
+        vendedor_a_descargar_html = st.selectbox("Vendedor (HTML)", vendedores_disponibles, key="select_vendedor_dl_html")
+        html_vendedor = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar_html)
+        st.download_button(
+            label=f"📥 Descargar Ruta {vendedor_a_descargar_html} (HTML)",
+            data=html_vendedor,
+            file_name=f"Ruta_{vendedor_a_descargar_html.replace(' ', '_')}.html",
             mime="text/html",
             use_container_width=True
         )
 
     with col_dl_2:
-        # Descarga Ruta por Vendedor Específico en HTML estilizado
-        vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
-        html_vendedor = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
+        st.markdown("##### 📄 Reportes en Formato PDF")
+        pdf_todos = generar_pdf_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=None)
         st.download_button(
-            label=f"📥 Descargar Ruta de {vendedor_a_descargar} (.html)",
-            data=html_vendedor,
-            file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_Formato_Logistico.html",
-            mime="text/html",
+            label="📥 Descargar Ruta Todos (PDF)",
+            data=pdf_todos,
+            file_name="Reporte_Rutas_Todos.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+        vendedor_a_descargar_pdf = st.selectbox("Vendedor (PDF)", vendedores_disponibles, key="select_vendedor_dl_pdf")
+        pdf_vendedor = generar_pdf_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar_pdf)
+        st.download_button(
+            label=f"📥 Descargar Ruta {vendedor_a_descargar_pdf} (PDF)",
+            data=pdf_vendedor,
+            file_name=f"Reporte_Rutas_{vendedor_a_descargar_pdf.replace(' ', '_')}.pdf",
+            mime="application/pdf",
             use_container_width=True
         )
 
