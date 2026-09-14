@@ -61,11 +61,10 @@ def inicializar_estado_global():
         st.session_state["df_vendedores"] = pd.DataFrame()
     if "df_mercaderistas" not in st.session_state:
         st.session_state["df_mercaderistas"] = pd.DataFrame()
+    if "df_tiempos" not in st.session_state:
+        st.session_state["df_tiempos"] = pd.DataFrame()
     if "df_clientes" not in st.session_state:
         st.session_state["df_clientes"] = pd.DataFrame()
-    # Opciones configurables para el tiempo de despacho
-    if "tiempos_despacho_opciones" not in st.session_state:
-        st.session_state["tiempos_despacho_opciones"] = ["24h", "48h", "72h", "24 HORAS", "48 HORAS"]
     if "historial_semana_previa" not in st.session_state:
         st.session_state["historial_semana_previa"] = {"semana": "Semana 1", "fecha": datetime.now().date()}
 
@@ -102,17 +101,22 @@ def normalizar_dia(dia):
     return mapping.get(d, str(dia).strip().capitalize())
 
 def normalizar_tiempo_despacho(val):
+    """
+    Convierte cualquier variante (24h, 24 horas, 24 hr, 24 h, etc.)
+    al formato estándar uniforme.
+    """
     if pd.isna(val) or not val:
-        return "24h"
-    s = str(val).strip().upper()
-    # Unificar variantes de 24h y 48h
+        return "24 horas"
+    s = str(val).strip().lower()
+    
     if "24" in s:
-        return "24h"
-    if "48" in s:
-        return "48h"
-    if "72" in s:
-        return "72h"
-    return str(val).strip()
+        return "24 horas"
+    elif "48" in s:
+        return "48 horas"
+    elif "72" in s:
+        return "72 horas"
+    
+    return str(val).strip().capitalize()
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -160,24 +164,6 @@ if st.session_state["usuario"] is None:
 else:
     st.sidebar.write(f"👤 Conectado como: **{st.session_state['usuario'].email}**")
     st.sidebar.caption(f"Dispositivo de confianza: {'Activado 🔒' if st.session_state['dispositivo_confianza'] else 'Desactivado'}")
-    
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("⚙️ Configuración de Tiempos")
-    st.sidebar.markdown("Personaliza las opciones del menú desplegable de Despacho:")
-    
-    # Editor de opciones para tiempos de despacho
-    opciones_actuales = st.sidebar.text_area(
-        "Opciones (separadas por coma)", 
-        value=", ".join(st.session_state["tiempos_despacho_opciones"])
-    )
-    if st.sidebar.button("Actualizar Opciones de Despacho"):
-        lista_nueva = [op.strip() for op in opciones_actuales.split(",") if op.strip()]
-        if lista_nueva:
-            st.session_state["tiempos_despacho_opciones"] = lista_nueva
-            st.sidebar.success("¡Opciones actualizadas con éxito!")
-            st.rerun()
-
-    st.sidebar.markdown("---")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["usuario"] = None
         st.rerun()
@@ -198,6 +184,7 @@ columnas_clientes = [
     "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
 ]
 
+# Carga de personal y tiempos desde Supabase
 if st.session_state["df_vendedores"].empty:
   if supabase:
     try:
@@ -238,6 +225,27 @@ if st.session_state["df_mercaderistas"].empty:
         {"Mercaderista": "José Pire", "Nro de Ruta": "Ruta M-02"},
     ])
 
+if st.session_state["df_tiempos"].empty:
+  if supabase:
+    try:
+      res_t = supabase.table("personal_rutas").select("*").eq("tipo", "tiempo_despacho").execute()
+      if res_t.data:
+        st.session_state["df_tiempos"] = pd.DataFrame(res_t.data).rename(columns={"Vendedor": "Tiempo de Despacho"})[["Tiempo de Despacho"]]
+      else:
+        raise Exception()
+    except:
+      st.session_state["df_tiempos"] = pd.DataFrame([
+          {"Tiempo de Despacho": "24 horas"},
+          {"Tiempo de Despacho": "48 horas"},
+          {"Tiempo de Despacho": "72 horas"},
+      ])
+  else:
+    st.session_state["df_tiempos"] = pd.DataFrame([
+        {"Tiempo de Despacho": "24 horas"},
+        {"Tiempo de Despacho": "48 horas"},
+        {"Tiempo de Despacho": "72 horas"},
+    ])
+
 if st.session_state["df_clientes"].empty:
   if supabase:
     try:
@@ -269,12 +277,19 @@ def guardar_en_base_de_datos(df):
 
       supabase.table("personal_rutas").delete().neq("id", -999999).execute()
       registros_personal = []
+      
       for _, row in st.session_state["df_vendedores"].dropna(subset=["Vendedor"]).iterrows():
         if str(row["Vendedor"]).strip() != "":
           registros_personal.append({"tipo": "vendedor", "Vendedor": str(row["Vendedor"]), "Nro de Ruta": str(row["Nro de Ruta"])})
+          
       for _, row in st.session_state["df_mercaderistas"].dropna(subset=["Mercaderista"]).iterrows():
         if str(row["Mercaderista"]).strip() != "":
           registros_personal.append({"tipo": "mercaderista", "Vendedor": str(row["Mercaderista"]), "Nro de Ruta": str(row["Nro de Ruta"])})
+
+      for _, row in st.session_state["df_tiempos"].dropna(subset=["Tiempo de Despacho"]).iterrows():
+        if str(row["Tiempo de Despacho"]).strip() != "":
+          registros_personal.append({"tipo": "tiempo_despacho", "Vendedor": str(row["Tiempo de Despacho"]), "Nro de Ruta": ""})
+
       if registros_personal:
         supabase.table("personal_rutas").insert(registros_personal).execute()
       st.success("¡Cambios guardados en la base de datos correctamente!")
@@ -290,9 +305,8 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
     dias_habiles = ["lunes", "martes", "miércoles", "jueves", "viernes"]
     dias_orden_completo = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     
-    # Normalizar tiempo de despacho para cálculos exactos (24h vs 48h)
     t_norm = normalizar_tiempo_despacho(tiempo_despacho)
-    saltos_habiles = 2 if t_norm == "48h" or "48" in str(tiempo_despacho) else 1
+    saltos_habiles = 2 if "48" in t_norm else (3 if "72" in t_norm else 1)
 
     sub_dias = [d.strip() for d in str(dia_visita_str).split(",")]
     resultados_despacho = []
@@ -383,18 +397,16 @@ with tab_general:
                     nuevo_df[col_target] = df_excel[col_excel]
                     break
 
-            # Unificar automáticamente formatos al cargar Excel (Ej: 24h / 24 HORAS)
+            # Normalización automática de tiempos de despacho (24h, 24 horas, etc.)
             if "Tiempo de Despacho" in nuevo_df.columns:
-                nuevo_df["Tiempo de Despacho"] = nuevo_df["Tiempo de Despacho"].apply(
-                    lambda x: "24h" if "24" in str(x) else ("48h" if "48" in str(x) else x)
-                )
+                nuevo_df["Tiempo de Despacho"] = nuevo_df["Tiempo de Despacho"].apply(normalizar_tiempo_despacho)
 
             for c in ["Semana 1", "Semana 2", "Mercaderia"]:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
             st.session_state["df_clientes"] = nuevo_df
-            st.success("¡Archivo Excel procesado con éxito y estandarizado!")
+            st.success("¡Archivo Excel procesado con éxito y normalizado!")
           else:
             prompt = f"""
                     Actúa como un experto en extracción de datos logísticos.
@@ -415,24 +427,40 @@ with tab_general:
           st.error(f"Error al procesar el archivo tras varios intentos: {e}")
 
     st.markdown("---")
-    col_vend, col_merc = st.columns(2)
-    with col_vend:
-      st.subheader("Vendedores")
-      edited_vendedores = st.data_editor(st.session_state["df_vendedores"], num_rows="dynamic", use_container_width=True, key="editor_vendedores_inline", hide_index=True)
-    with col_merc:
-      st.subheader("Mercaderistas CCS")
-      edited_mercaderistas = st.data_editor(st.session_state["df_mercaderistas"], num_rows="dynamic", use_container_width=True, key="editor_mercaderistas_inline", hide_index=True)
 
-    if st.button("💾 Guardar Cambios de Personal", use_container_width=True):
-      st.session_state["df_vendedores"] = edited_vendedores
-      st.session_state["df_mercaderistas"] = edited_mercaderistas
-      guardar_en_base_de_datos(st.session_state["df_clientes"])
-      st.rerun()
+    # ==========================================
+    # SECCIÓN CONFIGURABLE DE PERSONAL Y TIEMPOS (CON OPCIÓN DE OCULTAR)
+    # ==========================================
+    with st.expander("👁️ Configuración de Vendedores, Mercaderistas y Tiempos de Despacho (Ocultar / Mostrar)", expanded=True):
+        col_vend, col_merc, col_tiem = st.columns(3)
+        
+        with col_vend:
+          st.subheader("Vendedores")
+          edited_vendedores = st.data_editor(st.session_state["df_vendedores"], num_rows="dynamic", use_container_width=True, key="editor_vendedores_inline", hide_index=True)
+
+        with col_merc:
+          st.subheader("Mercaderistas CCS")
+          edited_mercaderistas = st.data_editor(st.session_state["df_mercaderistas"], num_rows="dynamic", use_container_width=True, key="editor_mercaderistas_inline", hide_index=True)
+
+        with col_tiem:
+          st.subheader("Tiempos de Despacho")
+          edited_tiempos = st.data_editor(st.session_state["df_tiempos"], num_rows="dynamic", use_container_width=True, key="editor_tiempos_inline", hide_index=True)
+
+        if st.button("💾 Guardar Cambios de Personal y Tiempos", use_container_width=True):
+          st.session_state["df_vendedores"] = edited_vendedores
+          st.session_state["df_mercaderistas"] = edited_mercaderistas
+          st.session_state["df_tiempos"] = edited_tiempos
+          guardar_en_base_de_datos(st.session_state["df_clientes"])
+          st.rerun()
 
     st.markdown("---")
     st.subheader("Cuadro Maestro de Clientes")
+    
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
+    lista_tiempos_opciones = st.session_state["df_tiempos"]["Tiempo de Despacho"].dropna().tolist()
+    if not lista_tiempos_opciones:
+        lista_tiempos_opciones = ["24 horas", "48 horas", "72 horas"]
 
     columnas_excluir_vista_general = [
         "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4", "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
@@ -448,8 +476,8 @@ with tab_general:
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              # Opciones dinámicas alimentadas desde la barra lateral
-              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=st.session_state["tiempos_despacho_opciones"]),
+              # Conectado directamente a la tabla editable de tiempos de despacho
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=lista_tiempos_opciones),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
           }
@@ -600,7 +628,7 @@ with tab_ruta_despacho:
         for _, r in df_despachos.iterrows():
             cliente_val = r.get("Cliente", "No aplica")
             ubicacion_val = r.get("Ubicacion", "No aplica")
-            tiempo_desp = r.get("Tiempo de Despacho", "24h")
+            tiempo_desp = r.get("Tiempo de Despacho", "24 horas")
             for s_col in ["Día de Visita Semana 1", "Día de Visita Semana 2"]:
                 dia_v = r.get(s_col, "")
                 if dia_v and str(dia_v).strip() not in ["", "nan", "None", "No asignado"]:
