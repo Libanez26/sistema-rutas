@@ -680,6 +680,54 @@ with tab_ruta_vendedores:
     else:
         st.info("No hay vendedores con rutas asignadas.")
 
+    st.markdown("---")
+    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico)")
+    
+    col_dl_1, col_dl_2 = st.columns(2)
+    
+    with col_dl_1:
+        # 1. Descarga Ruta Todos los Vendedores (excluyendo columnas de confirmación "Sí" o booleanas de control innecesarias)
+        if st.button("📥 Descargar Ruta Todos los Vendedores (.xlsx)", use_container_width=True):
+            df_todos = st.session_state["df_clientes"].copy()
+            
+            # Excluir columnas de control binario "Sí/No" o marcas internas si se desea un formato limpio idéntico al logístico
+            cols_excluir_reporte = [c for c in df_todos.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_")]
+            df_todos_limpio = df_todos.drop(columns=[c for c in cols_excluir_reporte if c in df_todos.columns])
+            
+            output_todos = io.BytesIO()
+            with pd.ExcelWriter(output_todos, engine="openpyxl") as writer:
+                df_todos_limpio.to_excel(writer, index=False, sheet_name=f"Ruta_General_{semana_seleccionada}")
+            
+            st.download_button(
+                label=f"⬇️ Guardar Archivo: Ruta Completa ({semana_seleccionada})",
+                data=output_todos.getvalue(),
+                file_name=f"Ruta_Todos_Vendedores_{semana_seleccionada}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+    with col_dl_2:
+        # 2. Descarga Ruta por Vendedor Específico
+        vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
+        if st.button(f"📥 Descargar Ruta de {vendedor_a_descargar}", use_container_width=True):
+            df_vend_single = st.session_state["df_clientes"].copy()
+            df_vend_single = df_vend_single[df_vend_single["Vendedor"].astype(str).str.strip() == vendedor_a_descargar.strip()]
+            
+            cols_excluir_reporte = [c for c in df_vend_single.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_")]
+            df_vend_limpio = df_vend_single.drop(columns=[c for c in cols_excluir_reporte if c in df_vend_single.columns])
+            
+            output_vend = io.BytesIO()
+            with pd.ExcelWriter(output_vend, engine="openpyxl") as writer:
+                df_vend_limpio.to_excel(writer, index=False, sheet_name=f"Ruta_{vendedor_a_descargar[:15]}")
+                
+            st.download_button(
+                label=f"⬇️ Guardar Archivo: Ruta de {vendedor_a_descargar}",
+                data=output_vend.getvalue(),
+                file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_{semana_seleccionada}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
     df_despachos = st.session_state["df_clientes"].copy()
