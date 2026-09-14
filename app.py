@@ -593,7 +593,15 @@ with tab_ruta_vendedores:
     with col_f2:
         dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"])
 
-    vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
+    # Obtener los vendedores ordenados según la tabla de configuración de personal
+    if not st.session_state["df_vendedores"].empty and "Vendedor" in st.session_state["df_vendedores"].columns:
+        orden_config = [str(v).strip() for v in st.session_state["df_vendedores"]["Vendedor"].dropna() if str(v).strip() != ""]
+        vendedores_en_datos = list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""})
+        
+        # Ordenar respetando la tabla de configuración, y añadiendo al final cualquier extra si lo hubiera
+        vendedores_disponibles = [v for v in orden_config if v in vendedores_en_datos] + [v for v in vendedores_en_datos if v not in orden_config]
+    else:
+        vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
     
     if vendedores_disponibles:
         st.markdown("---")
