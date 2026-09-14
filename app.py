@@ -15,7 +15,7 @@ from supabase import create_client, Client
 st.set_page_config(page_title="Gestión Integral de Rutas", layout="wide")
 
 # ==========================================
-# GESTIÓN AVANZADA DE IA Y MANEJO DE ERRORES (REINTENTOS)
+# GESTIÓN AVANZADA DE IA Y MANEJO DE ERRORES
 # ==========================================
 def configurar_gemini():
     if "GEMINI_API_KEY" in st.secrets:
@@ -63,6 +63,9 @@ def inicializar_estado_global():
         st.session_state["df_mercaderistas"] = pd.DataFrame()
     if "df_clientes" not in st.session_state:
         st.session_state["df_clientes"] = pd.DataFrame()
+    # Opciones configurables para el tiempo de despacho
+    if "tiempos_despacho_opciones" not in st.session_state:
+        st.session_state["tiempos_despacho_opciones"] = ["24h", "48h", "72h", "24 HORAS", "48 HORAS"]
     if "historial_semana_previa" not in st.session_state:
         st.session_state["historial_semana_previa"] = {"semana": "Semana 1", "fecha": datetime.now().date()}
 
@@ -97,6 +100,19 @@ def normalizar_dia(dia):
         "sabado": "Sábado", "sábado": "Sábado", "domingo": "Domingo"
     }
     return mapping.get(d, str(dia).strip().capitalize())
+
+def normalizar_tiempo_despacho(val):
+    if pd.isna(val) or not val:
+        return "24h"
+    s = str(val).strip().upper()
+    # Unificar variantes de 24h y 48h
+    if "24" in s:
+        return "24h"
+    if "48" in s:
+        return "48h"
+    if "72" in s:
+        return "72h"
+    return str(val).strip()
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -144,6 +160,24 @@ if st.session_state["usuario"] is None:
 else:
     st.sidebar.write(f"👤 Conectado como: **{st.session_state['usuario'].email}**")
     st.sidebar.caption(f"Dispositivo de confianza: {'Activado 🔒' if st.session_state['dispositivo_confianza'] else 'Desactivado'}")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚙️ Configuración de Tiempos")
+    st.sidebar.markdown("Personaliza las opciones del menú desplegable de Despacho:")
+    
+    # Editor de opciones para tiempos de despacho
+    opciones_actuales = st.sidebar.text_area(
+        "Opciones (separadas por coma)", 
+        value=", ".join(st.session_state["tiempos_despacho_opciones"])
+    )
+    if st.sidebar.button("Actualizar Opciones de Despacho"):
+        lista_nueva = [op.strip() for op in opciones_actuales.split(",") if op.strip()]
+        if lista_nueva:
+            st.session_state["tiempos_despacho_opciones"] = lista_nueva
+            st.sidebar.success("¡Opciones actualizadas con éxito!")
+            st.rerun()
+
+    st.sidebar.markdown("---")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["usuario"] = None
         st.rerun()
@@ -153,7 +187,6 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
-# Lista de columnas limpia (sin Tiempo de Mercaderia para evitar desplazamientos)
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
@@ -257,8 +290,9 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
     dias_habiles = ["lunes", "martes", "miércoles", "jueves", "viernes"]
     dias_orden_completo = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     
-    tiempo_limpio = str(tiempo_despacho).strip().upper()
-    saltos_habiles = 2 if "48" in tiempo_limpio else 1
+    # Normalizar tiempo de despacho para cálculos exactos (24h vs 48h)
+    t_norm = normalizar_tiempo_despacho(tiempo_despacho)
+    saltos_habiles = 2 if t_norm == "48h" or "48" in str(tiempo_despacho) else 1
 
     sub_dias = [d.strip() for d in str(dia_visita_str).split(",")]
     resultados_despacho = []
@@ -313,7 +347,6 @@ with tab_general:
               df_excel[col] = df_excel[col].astype(str).str.strip()
               df_excel[col] = df_excel[col].replace({"nan": "", "None": ""})
 
-            # Mapeo exacto evitando desvíos por columnas eliminadas o nombres con espacios
             mapping_cols = {
                 "Vendedor": "Vendedor",
                 "Nro de Ruta": "Nro de Ruta (Ventas)",
@@ -350,12 +383,18 @@ with tab_general:
                     nuevo_df[col_target] = df_excel[col_excel]
                     break
 
+            # Unificar automáticamente formatos al cargar Excel (Ej: 24h / 24 HORAS)
+            if "Tiempo de Despacho" in nuevo_df.columns:
+                nuevo_df["Tiempo de Despacho"] = nuevo_df["Tiempo de Despacho"].apply(
+                    lambda x: "24h" if "24" in str(x) else ("48h" if "48" in str(x) else x)
+                )
+
             for c in ["Semana 1", "Semana 2", "Mercaderia"]:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
             st.session_state["df_clientes"] = nuevo_df
-            st.success("¡Archivo Excel procesado con éxito y perfectamente alineado!")
+            st.success("¡Archivo Excel procesado con éxito y estandarizado!")
           else:
             prompt = f"""
                     Actúa como un experto en extracción de datos logísticos.
@@ -409,7 +448,8 @@ with tab_general:
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24h", "48h", "24 HORAS", "48 HORAS"]),
+              # Opciones dinámicas alimentadas desde la barra lateral
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=st.session_state["tiempos_despacho_opciones"]),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
           }
