@@ -5,10 +5,6 @@ import pandas as pd
 import streamlit as st
 import google.generativeai as genai
 from datetime import datetime, timedelta
-from reportlab.lib.pagesizes import landscape, letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
 from supabase import create_client, Client
 
 # Configuración inicial de la página
@@ -167,15 +163,12 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
+# Columnas principales limpias (sin las columnas S4, S3, S2, S1 innecesarias en el cuadro maestro)
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
     "Tiempo de Despacho", "Mercaderia", "Mercaderista", "Nro de Ruta (Mercaderia)",
-    "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2",
-    "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
-    "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
-    "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
-    "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
+    "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"
 ]
 
 # Carga de personal y tiempos desde Supabase o por defecto
@@ -461,11 +454,7 @@ with tab_general:
     if not lista_tiempos_opciones:
         lista_tiempos_opciones = ["24 horas", "48 horas"]
 
-    columnas_excluir_vista_general = [
-        "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4", "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
-        "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2", "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1"
-    ]
-    df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c not in columnas_excluir_vista_general]].copy()
+    df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
 
     # Filtrar en tiempo real si el usuario escribe en la barra de búsqueda rápida
     if texto_busqueda:
@@ -492,7 +481,6 @@ with tab_general:
       if submitted:
         df_actualizado = st.session_state["df_clientes"].copy()
         
-        # Si se usó el buscador, actualizamos solo las filas filtradas mapeando por su Nro o índice original
         if texto_busqueda:
             for idx, row in edited_df_visible.iterrows():
                 nro_cliente = row.get("Nro")
@@ -538,67 +526,18 @@ with tab_general:
         st.rerun()
 
     st.markdown("---")
-    st.subheader("📥 Opciones de Descarga y Reportes Avanzados")
+    st.subheader("📥 Descargar Reporte en Excel")
     
-    col_dl1, col_dl2, col_dl3 = st.columns(3)
-    with col_dl1:
-      output_excel = io.BytesIO()
-      with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
-        st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Base de Datos")
-      st.download_button(
-          label="📥 Descargar Excel (.xlsx)",
-          data=output_excel.getvalue(),
-          file_name="Cuadro_Maestro_Rutas.xlsx",
-          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          use_container_width=True,
-      )
-
-    with col_dl2:
-      html_content = st.session_state["df_clientes"].to_html(classes="table table-striped table-bordered", index=False)
-      st.download_button(
-          label="🌐 Exportar a HTML Estilizado",
-          data=html_content,
-          file_name="Cuadro_Maestro_Rutas.html",
-          mime="text/html",
-          use_container_width=True
-      )
-
-    with col_dl3:
-      def generar_pdf_general(df):
-        buffer = io.BytesIO()
-        df_pdf = df.drop(columns=[col for col in columnas_excluir_vista_general if col in df.columns], errors="ignore").fillna("No aplica")
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
-        elements = []
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1f4e78"), spaceAfter=12, alignment=1)
-        elements.append(Paragraph("Cuadro Maestro de Clientes y Rutas", title_style))
-        
-        cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=1)
-        header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], fontSize=6.5, leading=8, textColor=colors.whitesmoke, fontName="Helvetica-Bold", alignment=1)
-
-        data = [[Paragraph(str(col), header_style) for col in df_pdf.columns]]
-        for _, row in df_pdf.iterrows():
-            data.append([Paragraph(str(val), cell_style) for val in row.values])
-
-        table = Table(data, colWidths=[762 / len(df_pdf.columns)] * len(df_pdf.columns), repeatRows=1)
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2C5E3B")),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d0d0")),
-        ]))
-        elements.append(table)
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer.getvalue()
-
-      st.download_button(
-          label="📄 Descargar en Formato PDF",
-          data=generar_pdf_general(st.session_state["df_clientes"]),
-          file_name="Cuadro_Maestro_Rutas.pdf",
-          mime="application/pdf",
-          use_container_width=True,
-      )
+    output_excel = io.BytesIO()
+    with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
+      st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Cuadro Maestro")
+    st.download_button(
+        label="📥 Descargar Cuadro Maestro (.xlsx)",
+        data=output_excel.getvalue(),
+        file_name="Cuadro_Maestro_Rutas.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
 
 with tab_ruta_vendedores:
     st.header("🚚 Seguimiento de Ruta de Vendedores")
@@ -654,7 +593,7 @@ with tab_ruta_despacho:
                                 "Cliente": cliente_val, "Ubicación": ubicacion_val,
                                 "Tiempo de Despacho": tiempo_desp, "Día de Despacho": d_item
                             })
-        if datos_svg := datos_vista_despacho:
+        if datos_vista_despacho:
             st.dataframe(pd.DataFrame(datos_vista_despacho), use_container_width=True, hide_index=True)
         else:
             st.info("No hay despachos programados para esta semana.")
