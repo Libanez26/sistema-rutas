@@ -86,15 +86,45 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 def normalizar_dia(dia):
+    """
+    Corrige errores ortográficos, mayúsculas, tildes y variaciones 
+    en los días de la semana (ej: miercoles -> Miércoles).
+    """
     if pd.isna(dia) or not dia:
         return ""
-    d = str(dia).strip().lower()
+    
+    # Limpiar posibles días múltiples separados por coma (ej: "Lunes, miercoles")
+    sub_dias = [d.strip() for d in str(dia).split(",")]
+    dias_corregidos = []
+    
     mapping = {
-        "lunes": "Lunes", "martes": "Martes", "miercoles": "Miércoles",
-        "miércoles": "Miércoles", "jueves": "Jueves", "viernes": "Viernes",
-        "sabado": "Sábado", "sábado": "Sábado", "domingo": "Domingo"
+        "lunes": "Lunes", 
+        "martes": "Martes", 
+        "miercoles": "Miércoles", "miércoles": "Miércoles", 
+        "jueves": "Jueves", 
+        "viernes": "Viernes"
     }
-    return mapping.get(d, str(dia).strip().capitalize())
+    
+    for d in sub_dias:
+        d_limpio = d.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+        # Mapeo flexible eliminando tildes para comparar sin errores
+        if "lunes" in d_limpio:
+            dias_corregidos.append("Lunes")
+        elif "martes" in d_limpio:
+            dias_corregidos.append("Martes")
+        elif "mierc" in d_limpio or "mierc" in d_limpio:
+            dias_corregidos.append("Miércoles")
+        elif "jueves" in d_limpio:
+            dias_corregidos.append("Jueves")
+        elif "viernes" in d_limpio:
+            dias_corregidos.append("Viernes")
+        else:
+            # Si viene otro valor, intentar formatearlo limpio
+            mapped = mapping.get(d.lower(), d.strip().capitalize())
+            if mapped in ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]:
+                dias_corregidos.append(mapped)
+                
+    return ", ".join(dias_corregidos) if dias_corregidos else str(dia).strip()
 
 def normalizar_tiempo_despacho(val):
     if pd.isna(val) or not val:
@@ -134,7 +164,7 @@ if st.session_state["usuario"] is None:
                 except Exception as e:
                     st.error(f"Error al iniciar sesión: {e}")
             else:
-                st.error("Supabase no está configurado correctamente en los Secrets.")
+                st.error("Supabase não está configurado correctamente en los Secrets.")
                 
     with tab_registro:
         st.subheader("Crear una cuenta nueva")
@@ -163,7 +193,6 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
-# Definición completa y unificada de columnas para evitar KeyErrors
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
@@ -385,6 +414,11 @@ with tab_general:
                     nuevo_df[col_target] = df_excel[col_excel]
                     break
 
+            # Normalizar automáticamente tildes y errores en días de visita al cargar Excel
+            for col_d in ["Día de Visita Semana 1", "Día de Visita Semana 2", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"]:
+                if col_d in nuevo_df.columns:
+                    nuevo_df[col_d] = nuevo_df[col_d].apply(normalizar_dia)
+
             if "Tiempo de Despacho" in nuevo_df.columns:
                 nuevo_df["Tiempo de Despacho"] = nuevo_df["Tiempo de Despacho"].apply(normalizar_tiempo_despacho)
 
@@ -482,7 +516,6 @@ with tab_general:
       if submitted:
         df_actualizado = st.session_state["df_clientes"].copy()
         
-        # Asegurarse de que todas las columnas de columnas_clientes existan en df_actualizado antes de actualizar
         for col_c in columnas_clientes:
             if col_c not in df_actualizado.columns:
                 df_actualizado[col_c] = False if ("Visita_" in col_c or "Pedido_" in col_c) else ""
@@ -494,10 +527,17 @@ with tab_general:
                 if not match_orig.empty:
                     orig_idx = match_orig.index[0]
                     for col in edited_df_visible.columns:
-                        df_actualizado.at[orig_idx, col] = row[col]
+                        # Aplicar normalización de días si se edita alguna columna de días
+                        if "Día" in col:
+                            df_actualizado.at[orig_idx, col] = normalizar_dia(row[col])
+                        else:
+                            df_actualizado.at[orig_idx, col] = row[col]
         else:
             for col in edited_df_visible.columns:
-              df_actualizado[col] = edited_df_visible[col]
+              if "Día" in col:
+                  df_actualizado[col] = edited_df_visible[col].apply(normalizar_dia)
+              else:
+                  df_actualizado[col] = edited_df_visible[col]
 
         if not df_actualizado.empty:
           if len(df_actualizado) > 1 and not texto_busqueda:
@@ -556,7 +596,8 @@ with tab_ruta_vendedores:
     with col_f1:
         semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
     with col_f2:
-        dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
+        # Selector limitado estrictamente de Lunes a Viernes
+        dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"])
 
     vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
     
@@ -577,6 +618,10 @@ with tab_ruta_vendedores:
                 col_pedido_estatus = f"Pedido_S{s_num}"
                 col_motivo_estatus = f"Motivo_Pedido_S{s_num}"
                 
+                # Normalizar registros de días para asegurar coincidencia con o sin tildes
+                if col_visita_campo in df_v_filtrado.columns:
+                    df_v_filtrado[col_visita_campo] = df_v_filtrado[col_visita_campo].apply(normalizar_dia)
+                
                 if col_visita_campo in df_v_filtrado.columns and dia_seleccionado:
                     df_v_filtrado = df_v_filtrado[
                         df_v_filtrado[col_visita_campo].astype(str).str.contains(dia_seleccionado, case=False, na=False)
@@ -589,7 +634,10 @@ with tab_ruta_vendedores:
                 
                 for c in [col_visita_estatus, col_pedido_estatus]:
                     df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
+                for c in [col_motivo_estatus]:
+                    df_v_filtrado[c] = df_v_filtrado[c].fillna("").astype(str)
 
+                # Editor interactivo configurado con checkboxes para estatus y texto libre para el motivo
                 df_editado_col = st.data_editor(
                     df_v_filtrado[cols_view], 
                     use_container_width=True, 
@@ -598,6 +646,7 @@ with tab_ruta_vendedores:
                     column_config={
                         col_visita_estatus: st.column_config.CheckboxColumn("¿Visitado?", default=False),
                         col_pedido_estatus: st.column_config.CheckboxColumn("¿Pedido?", default=False),
+                        col_motivo_estatus: st.column_config.TextColumn("Motivo / Observación", default=""),
                     }
                 )
                 
@@ -607,7 +656,6 @@ with tab_ruta_vendedores:
                         match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
                         if not match_global.empty:
                             g_idx = match_global.index[0]
-                            # Asegurarse de que existan las columnas en df_clientes antes de actualizar
                             for col_chk in [col_visita_estatus, col_pedido_estatus, col_motivo_estatus]:
                                 if col_chk not in st.session_state["df_clientes"].columns:
                                     st.session_state["df_clientes"][col_chk] = False if ("Visita_" in col_chk or "Pedido_" in col_chk) else ""
@@ -635,7 +683,7 @@ with tab_ruta_despacho:
             for s_col in ["Día de Visita Semana 1", "Día de Visita Semana 2"]:
                 dia_v = r.get(s_col, "")
                 if dia_v and str(dia_v).strip() not in ["", "nan", "None", "No asignado"]:
-                    desp = calcular_despacho_por_dia_y_semana(dia_v, "Semana 1" if "Semana 1" in s_col else "Semana 2", tiempo_desp)
+                    desp = calcular_despacho_por_dia_y_semana(dia_v, "Semana 1" if "Semana 1" in s_col else "Semana 2", tiempo_desp>
                     for d_item in [d.strip() for d in str(desp).split(",")]:
                         if f"({semana_filtro_esp})" in d_item:
                             datos_vista_despacho.append({
