@@ -6,6 +6,10 @@ import streamlit as st
 import google.generativeai as genai
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # Configuración inicial de la página
 st.set_page_config(page_title="Gestión Integral de Rutas", layout="wide")
@@ -134,6 +138,67 @@ def normalizar_tiempo_despacho(val):
     elif "72" in s:
         return "72 horas"
     return str(val).strip().capitalize()
+
+# ==========================================
+# FUNCIÓN DE GENERACIÓN DE PDF LOGÍSTICO (DOS SEMANAS, SIN SÍ/NO)
+# ==========================================
+def generar_pdf_rutas(df_rutas, vendedor_seleccionado=None):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=landscape(letter),
+        rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20
+    )
+    
+    elementos = []
+    estilos = getSampleStyleSheet()
+    
+    estilo_titulo = ParagraphStyle(
+        'TituloLogistico',
+        parent=estilos['Heading1'],
+        fontSize=14,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=15,
+        alignment=1
+    )
+    
+    titulo_texto = f"Descarga de Rutas - {vendedor_seleccionado} (Formato Logístico Completo)" if vendedor_seleccionado else "Descarga de Rutas - Todos los Vendedores (Formato Logístico Completo)"
+    elementos.append(Paragraph(titulo_texto, estilo_titulo))
+    elementos.append(Spacer(1, 10))
+    
+    df_filtrado = df_rutas.copy()
+    if vendedor_seleccionado:
+        df_filtrado = df_filtrado[df_filtrado["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
+    
+    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo para reflejar el formato limpio
+    cols_excluir = [c for c in df_filtrado.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
+    df_limpio = df_filtrado.drop(columns=[c for c in cols_excluir if c in df_filtrado.columns])
+    
+    df_limpio = df_limpio.fillna("").astype(str)
+    
+    if df_limpio.empty:
+        elementos.append(Paragraph("No hay registros para mostrar en esta selección.", estilos['Normal']))
+    else:
+        data = [list(df_limpio.columns)] + df_limpio.values.tolist()
+        
+        tabla_pdf = Table(data, repeatRows=1)
+        tabla_pdf.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ]))
+        elementos.append(tabla_pdf)
+        
+    doc.build(elementos)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -598,7 +663,6 @@ with tab_ruta_vendedores:
         orden_config = [str(v).strip() for v in st.session_state["df_vendedores"]["Vendedor"].dropna() if str(v).strip() != ""]
         vendedores_en_datos = list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""})
         
-        # Ordenar respetando la tabla de configuración, y añadiendo al final cualquier extra si lo hubiera
         vendedores_disponibles = [v for v in orden_config if v in vendedores_en_datos] + [v for v in vendedores_en_datos if v not in orden_config]
     else:
         vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
@@ -633,7 +697,6 @@ with tab_ruta_vendedores:
                     if c not in df_v_filtrado.columns:
                         df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
                 
-                # Asegurar tipos correctos incluso si el DataFrame está vacío o trae valores booleanos/nulos
                 for c in [col_visita_estatus, col_pedido_estatus]:
                     if c in df_v_filtrado.columns:
                         df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
@@ -681,50 +744,32 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico)")
+    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico en PDF)")
     
     col_dl_1, col_dl_2 = st.columns(2)
     
     with col_dl_1:
-        # 1. Descarga Ruta Todos los Vendedores (excluyendo columnas de confirmación "Sí" o booleanas de control innecesarias)
-        if st.button("📥 Descargar Ruta Todos los Vendedores (.xlsx)", use_container_width=True):
-            df_todos = st.session_state["df_clientes"].copy()
-            
-            # Excluir columnas de control binario "Sí/No" o marcas internas si se desea un formato limpio idéntico al logístico
-            cols_excluir_reporte = [c for c in df_todos.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_")]
-            df_todos_limpio = df_todos.drop(columns=[c for c in cols_excluir_reporte if c in df_todos.columns])
-            
-            output_todos = io.BytesIO()
-            with pd.ExcelWriter(output_todos, engine="openpyxl") as writer:
-                df_todos_limpio.to_excel(writer, index=False, sheet_name=f"Ruta_General_{semana_seleccionada}")
-            
+        # Descarga Ruta Todos los Vendedores en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
+        if st.button("📥 Descargar Ruta Todos los Vendedores (.pdf)", use_container_width=True):
+            pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=None)
             st.download_button(
-                label=f"⬇️ Guardar Archivo: Ruta Completa ({semana_seleccionada})",
-                data=output_todos.getvalue(),
-                file_name=f"Ruta_Todos_Vendedores_{semana_seleccionada}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                label="⬇️ Guardar Archivo: Ruta Completa (PDF)",
+                data=pdf_bytes,
+                file_name="Ruta_Todos_Vendedores_Formato_Logistico.pdf",
+                mime="application/pdf",
                 use_container_width=True
             )
 
     with col_dl_2:
-        # 2. Descarga Ruta por Vendedor Específico
+        # Descarga Ruta por Vendedor Específico en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
         vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
-        if st.button(f"📥 Descargar Ruta de {vendedor_a_descargar}", use_container_width=True):
-            df_vend_single = st.session_state["df_clientes"].copy()
-            df_vend_single = df_vend_single[df_vend_single["Vendedor"].astype(str).str.strip() == vendedor_a_descargar.strip()]
-            
-            cols_excluir_reporte = [c for c in df_vend_single.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_")]
-            df_vend_limpio = df_vend_single.drop(columns=[c for c in cols_excluir_reporte if c in df_vend_single.columns])
-            
-            output_vend = io.BytesIO()
-            with pd.ExcelWriter(output_vend, engine="openpyxl") as writer:
-                df_vend_limpio.to_excel(writer, index=False, sheet_name=f"Ruta_{vendedor_a_descargar[:15]}")
-                
+        if st.button(f"📥 Descargar Ruta de {vendedor_a_descargar} (.pdf)", use_container_width=True):
+            pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
             st.download_button(
-                label=f"⬇️ Guardar Archivo: Ruta de {vendedor_a_descargar}",
-                data=output_vend.getvalue(),
-                file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_{semana_seleccionada}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                label=f"⬇️ Guardar Archivo: Ruta de {vendedor_a_descargar} (PDF)",
+                data=pdf_bytes,
+                file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_Formato_Logistico.pdf",
+                mime="application/pdf",
                 use_container_width=True
             )
 
