@@ -103,7 +103,7 @@ def normalizar_dia(dia):
 def normalizar_tiempo_despacho(val):
     """
     Convierte cualquier variante (24h, 24 horas, 24 hr, 24 h, etc.)
-    al formato estándar uniforme.
+    al formato estándar uniforme '24 horas', '48 horas', etc.
     """
     if pd.isna(val) or not val:
         return "24 horas"
@@ -184,7 +184,7 @@ columnas_clientes = [
     "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
 ]
 
-# Carga de personal y tiempos desde Supabase
+# Carga de personal y tiempos desde Supabase o por defecto
 if st.session_state["df_vendedores"].empty:
   if supabase:
     try:
@@ -237,13 +237,11 @@ if st.session_state["df_tiempos"].empty:
       st.session_state["df_tiempos"] = pd.DataFrame([
           {"Tiempo de Despacho": "24 horas"},
           {"Tiempo de Despacho": "48 horas"},
-          {"Tiempo de Despacho": "72 horas"},
       ])
   else:
     st.session_state["df_tiempos"] = pd.DataFrame([
         {"Tiempo de Despacho": "24 horas"},
         {"Tiempo de Despacho": "48 horas"},
-        {"Tiempo de Despacho": "72 horas"},
     ])
 
 if st.session_state["df_clientes"].empty:
@@ -458,9 +456,12 @@ with tab_general:
     
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
-    lista_tiempos_opciones = st.session_state["df_tiempos"]["Tiempo de Despacho"].dropna().tolist()
+    
+    # Obtener opciones actualizadas dinámicamente desde la tabla de tiempos de despacho
+    if not st.session_state["df_tiempos"].empty and "Tiempo de Despacho" in st.session_state["df_tiempos"].columns:
+        lista_tiempos_opciones = sorted(list(set(st.session_state["df_tiempos"]["Tiempo de Despacho"].dropna().astype(str)) - {""}))
     if not lista_tiempos_opciones:
-        lista_tiempos_opciones = ["24 horas", "48 horas", "72 horas"]
+        lista_tiempos_opciones = ["24 horas", "48 horas"]
 
     columnas_excluir_vista_general = [
         "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4", "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
@@ -476,7 +477,7 @@ with tab_general:
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              # Conectado directamente a la tabla editable de tiempos de despacho
+              # Conectado dinámicamente a la tabla editable de tiempos de despacho
               "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=lista_tiempos_opciones),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
