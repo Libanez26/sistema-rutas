@@ -625,14 +625,20 @@ with tab_ruta_vendedores:
                     if c not in df_v_filtrado.columns:
                         df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
                 
+                # Asegurar tipos correctos incluso si el DataFrame está vacío o trae valores booleanos/nulos
                 for c in [col_visita_estatus, col_pedido_estatus]:
-                    df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
-                
+                    if c in df_v_filtrado.columns:
+                        df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
+                    else:
+                        df_v_filtrado[c] = False
+
                 for c in [col_motivo_estatus]:
-                    # Limpiamos cualquier "False", booleano o nulo para que aparezca vacío
-                    df_v_filtrado[c] = df_v_filtrado[c].apply(
-                        lambda x: "" if pd.isna(x) or x is False or str(x).lower() in ["false", "none", "nan"] else str(x)
-                    )
+                    if c in df_v_filtrado.columns:
+                        df_v_filtrado[c] = df_v_filtrado[c].apply(
+                            lambda x: "" if pd.isna(x) or x is False or str(x).lower() in ["false", "none", "nan"] else str(x)
+                        ).astype(str)
+                    else:
+                        df_v_filtrado[c] = ""
 
                 df_editado_col = st.data_editor(
                     df_v_filtrado[cols_view], 
