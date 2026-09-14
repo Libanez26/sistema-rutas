@@ -163,7 +163,6 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
-# Columnas estrictas del Cuadro Maestro limpio
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
@@ -171,7 +170,7 @@ columnas_clientes = [
     "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"
 ]
 
-# Carga de personal y tiempos desde Supabase o por defecto
+# Carga de personal y tiempos
 if st.session_state["df_vendedores"].empty:
   if supabase:
     try:
@@ -412,9 +411,6 @@ with tab_general:
 
     st.markdown("---")
 
-    # ==========================================
-    # SECCIÓN CONFIGURABLE DE PERSONAL Y TIEMPOS (CON OPCIÓN DE OCULTAR)
-    # ==========================================
     with st.expander("👁️ Configuración de Vendedores, Mercaderistas y Tiempos de Despacho (Ocultar / Mostrar)", expanded=True):
         col_vend, col_merc, col_tiem = st.columns(3)
         
@@ -440,9 +436,6 @@ with tab_general:
     st.markdown("---")
     st.subheader("Cuadro Maestro de Clientes")
     
-    # ==========================================
-    # BARRA DE BÚSQUEDA RÁPIDA (ESTILO CONTROL + B)
-    # ==========================================
     texto_busqueda = st.text_input("🔍 Búsqueda rápida (Ctrl+B / Escribe cliente, mercaderista, ruta...):", placeholder="Ej: Ruta 01, La Muralla, Yorsin, Caracas...")
 
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
@@ -454,10 +447,8 @@ with tab_general:
     if not lista_tiempos_opciones:
         lista_tiempos_opciones = ["24 horas", "48 horas"]
 
-    # Asegurar que solo se visualicen las columnas estrictamente permitidas
     df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
 
-    # Filtrar en tiempo real si el usuario escribe en la barra de búsqueda rápida
     if texto_busqueda:
         mask_busqueda = df_general_visible.astype(str).apply(lambda row: row.str.contains(texto_busqueda, case=False, na=False).any(), axis=1)
         df_general_visible = df_general_visible[mask_busqueda]
@@ -529,7 +520,6 @@ with tab_general:
     st.markdown("---")
     st.subheader("📥 Descargar Reporte en Excel")
     
-    # Filtrado estricto para que la descarga exporte exclusivamente las columnas limpias permitidas
     df_exportar = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
     
     output_excel = io.BytesIO()
@@ -547,34 +537,63 @@ with tab_general:
 with tab_ruta_vendedores:
     st.header("🚚 Seguimiento de Ruta de Vendedores")
     df_seguimiento = st.session_state["df_clientes"].copy()
-    for s_idx in [1, 2, 3, 4]:
-        for c_field in [f"Visita_S{s_idx}", f"Pedido_S{s_idx}", f"Motivo_Pedido_S{s_idx}"]:
-            if c_field not in df_seguimiento.columns:
-                df_seguimiento[c_field] = ""
+    
+    # Selector de Semana y Día arriba (sin selector individual de vendedor)
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
+    with col_f2:
+        dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
 
     vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
+    
     if vendedores_disponibles:
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            vendedor_seleccionado = st.selectbox("Seleccionar Vendedor", vendedores_disponibles)
-        with col_f2:
-            semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
-        with col_f3:
-            dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-
-        mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
-        df_filtrado = df_seguimiento[mask_vendedor].copy()
-
-        if not df_filtrado.empty:
-            st.success(f"Registros encontrados para **{vendedor_seleccionado}**.")
-            cols_view = ["Nro", "Cliente", "Ubicacion", "Nro de Ruta (Ventas)", "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1"]
-            for c in cols_view:
-                if c not in df_filtrado.columns:
-                    df_filtrado[c] = ""
-            
-            df_editado_ruta = st.data_editor(df_filtrado[cols_view], use_container_width=True, hide_index=True, key="ed_ruta_v")
-            if st.button("💾 Guardar Estatus de Ruta", type="primary"):
-                st.success("¡Estatus guardado y sincronizado globalmente!")
+        st.markdown("---")
+        # Dividir la pantalla en columnas (una por cada vendedor)
+        cols_vendedores = st.columns(len(vendedores_disponibles))
+        
+        for idx, vendedor in enumerate(vendedores_disponibles):
+            with cols_vendedores[idx]:
+                st.subheader(f"👤 {vendedor}")
+                
+                # Filtrar registros para este vendedor
+                mask_v = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor.strip()
+                df_v_filtrado = df_seguimiento[mask_v].copy()
+                
+                # Columnas específicas a mostrar para el seguimiento
+                col_visita_campo = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
+                col_visita_estatus = "Visita_S1" # o campo correspondiente
+                col_pedido_estatus = "Pedido_S1"
+                col_motivo_estatus = "Motivo_Pedido_S1"
+                
+                cols_view = ["Nro", "Cliente", "Ubicacion", "Nro de Ruta (Ventas)", col_visita_estatus, col_pedido_estatus, col_motivo_estatus]
+                for c in cols_view:
+                    if c not in df_v_filtrado.columns:
+                        df_v_filtrado[c] = ""
+                
+                # Editor interactivo para este vendedor en su columna
+                df_editado_col = st.data_editor(
+                    df_v_filtrado[cols_view], 
+                    use_container_width=True, 
+                    hide_index=True, 
+                    key=f"ed_vendedor_{idx}"
+                )
+                
+                # Botón de guardado individual por columna/vendedor
+                if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}", use_container_width=True):
+                    # Actualizar los datos globales con los cambios de este vendedor
+                    for r_idx, row_edit in df_editado_col.iterrows():
+                        nro_val = row_edit.get("Nro")
+                        match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
+                        if not match_global.empty:
+                            g_idx = match_global.index[0]
+                            st.session_state["df_clientes"].at[g_idx, col_visita_estatus] = row_edit[col_visita_estatus]
+                            st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = row_edit[col_pedido_estatus]
+                            st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = row_edit[col_motivo_estatus]
+                    
+                    guardar_en_base_de_datos(st.session_state["df_clientes"])
+                    st.success(f"¡Ruta de {vendedor} guardada con éxito!")
+                    st.rerun()
     else:
         st.info("No hay vendedores con rutas asignadas.")
 
