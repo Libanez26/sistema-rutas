@@ -101,21 +101,15 @@ def normalizar_dia(dia):
     return mapping.get(d, str(dia).strip().capitalize())
 
 def normalizar_tiempo_despacho(val):
-    """
-    Convierte cualquier variante (24h, 24 horas, 24 hr, 24 h, etc.)
-    al formato estándar uniforme '24 horas', '48 horas', etc.
-    """
     if pd.isna(val) or not val:
         return "24 horas"
     s = str(val).strip().lower()
-    
     if "24" in s:
         return "24 horas"
     elif "48" in s:
         return "48 horas"
     elif "72" in s:
         return "72 horas"
-    
     return str(val).strip().capitalize()
 
 # ==========================================
@@ -395,7 +389,6 @@ with tab_general:
                     nuevo_df[col_target] = df_excel[col_excel]
                     break
 
-            # Normalización automática de tiempos de despacho (24h, 24 horas, etc.)
             if "Tiempo de Despacho" in nuevo_df.columns:
                 nuevo_df["Tiempo de Despacho"] = nuevo_df["Tiempo de Despacho"].apply(normalizar_tiempo_despacho)
 
@@ -454,10 +447,15 @@ with tab_general:
     st.markdown("---")
     st.subheader("Cuadro Maestro de Clientes")
     
+    # ==========================================
+    # BARRA DE BÚSQUEDA RÁPIDA (ESTILO CONTROL + B)
+    # ==========================================
+    texto_busqueda = st.text_input("🔍 Búsqueda rápida (Ctrl+B / Escribe cliente, mercaderista, ruta...):", placeholder="Ej: Ruta 01, La Muralla, Yorsin, Caracas...")
+
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
     
-    # Obtener opciones actualizadas dinámicamente desde la tabla de tiempos de despacho
+    lista_tiempos_opciones = []
     if not st.session_state["df_tiempos"].empty and "Tiempo de Despacho" in st.session_state["df_tiempos"].columns:
         lista_tiempos_opciones = sorted(list(set(st.session_state["df_tiempos"]["Tiempo de Despacho"].dropna().astype(str)) - {""}))
     if not lista_tiempos_opciones:
@@ -469,6 +467,12 @@ with tab_general:
     ]
     df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c not in columnas_excluir_vista_general]].copy()
 
+    # Filtrar en tiempo real si el usuario escribe en la barra de búsqueda rápida
+    if texto_busqueda:
+        mask_busqueda = df_general_visible.astype(str).apply(lambda row: row.str.contains(texto_busqueda, case=False, na=False).any(), axis=1)
+        df_general_visible = df_general_visible[mask_busqueda]
+        st.caption(f"Mostrando **{len(df_general_visible)}** resultados coincidentes con la búsqueda.")
+
     with st.form("form_cuadro_maestro"):
       edited_df_visible = st.data_editor(
           df_general_visible, num_rows="dynamic", use_container_width=True, key="editor_clientes_general", hide_index=True,
@@ -477,7 +481,6 @@ with tab_general:
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              # Conectado dinámicamente a la tabla editable de tiempos de despacho
               "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=lista_tiempos_opciones),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
@@ -488,11 +491,22 @@ with tab_general:
 
       if submitted:
         df_actualizado = st.session_state["df_clientes"].copy()
-        for col in edited_df_visible.columns:
-          df_actualizado[col] = edited_df_visible[col]
+        
+        # Si se usó el buscador, actualizamos solo las filas filtradas mapeando por su Nro o índice original
+        if texto_busqueda:
+            for idx, row in edited_df_visible.iterrows():
+                nro_cliente = row.get("Nro")
+                match_orig = df_actualizado[df_actualizado["Nro"] == nro_cliente]
+                if not match_orig.empty:
+                    orig_idx = match_orig.index[0]
+                    for col in edited_df_visible.columns:
+                        df_actualizado.at[orig_idx, col] = row[col]
+        else:
+            for col in edited_df_visible.columns:
+              df_actualizado[col] = edited_df_visible[col]
 
         if not df_actualizado.empty:
-          if len(df_actualizado) > 1:
+          if len(df_actualizado) > 1 and not texto_busqueda:
             ultima_fila = df_actualizado.iloc[-1]
             cliente_val = ultima_fila.get("Cliente", "")
             if pd.isna(cliente_val) or str(cliente_val).strip() == "":
@@ -640,7 +654,7 @@ with tab_ruta_despacho:
                                 "Cliente": cliente_val, "Ubicación": ubicacion_val,
                                 "Tiempo de Despacho": tiempo_desp, "Día de Despacho": d_item
                             })
-        if datos_vista_despacho:
+        if datos_svg := datos_vista_despacho:
             st.dataframe(pd.DataFrame(datos_vista_despacho), use_container_width=True, hide_index=True)
         else:
             st.info("No hay despachos programados para esta semana.")
