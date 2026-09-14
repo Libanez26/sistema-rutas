@@ -627,8 +627,12 @@ with tab_ruta_vendedores:
                 
                 for c in [col_visita_estatus, col_pedido_estatus]:
                     df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
+                
                 for c in [col_motivo_estatus]:
-                    df_v_filtrado[c] = df_v_filtrado[c].fillna("").astype(str)
+                    # Limpiamos cualquier "False", booleano o nulo para que aparezca vacío
+                    df_v_filtrado[c] = df_v_filtrado[c].apply(
+                        lambda x: "" if pd.isna(x) or x is False or str(x).lower() in ["false", "none", "nan"] else str(x)
+                    )
 
                 df_editado_col = st.data_editor(
                     df_v_filtrado[cols_view], 
