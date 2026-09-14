@@ -24,10 +24,6 @@ def configurar_gemini():
     return False
 
 def llamar_gemini_con_reintentos(prompt, pdf_bytes=None, max_intentos=3):
-    """
-    Bloques de reintento automático y soporte para múltiples modelos de Google Gemini
-    para evitar caídas de la interfaz ante fallos puntuales de la API.
-    """
     if not configurar_gemini():
         raise Exception("La API Key de Gemini no está configurada en los Secrets de Streamlit.")
 
@@ -47,7 +43,7 @@ def llamar_gemini_con_reintentos(prompt, pdf_bytes=None, max_intentos=3):
                 
                 if response and response.text:
                     return response.text
-            except Exception as e:
+            except Exception:
                 time.sleep(1)
                 continue
                 
@@ -157,11 +153,12 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
+# Lista de columnas limpia (sin Tiempo de Mercaderia para evitar desplazamientos)
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
     "Tiempo de Despacho", "Mercaderia", "Mercaderista", "Nro de Ruta (Mercaderia)",
-    "Tiempo de Mercaderia", "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2",
+    "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2",
     "Visita_S4", "Pedido_S4", "Motivo_Pedido_S4",
     "Visita_S3", "Pedido_S3", "Motivo_Pedido_S3",
     "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2",
@@ -298,7 +295,7 @@ tab_general, tab_ruta_vendedores, tab_ruta_despacho = st.tabs(["📊 Cuadro Maes
 
 with tab_general:
     st.header("Base de Datos General de Clientes y Rutas")
-    st.markdown("Sube tu archivo Excel o PDF para procesar la información de forma automatizada mediante IA con reintentos.")
+    st.markdown("Sube tu archivo Excel o PDF para procesar la información de forma automatizada.")
 
     uploaded_file = st.file_uploader("Cargar archivo (PDF o Excel)", type=["pdf", "xlsx"])
 
@@ -307,8 +304,6 @@ with tab_general:
         try:
           if uploaded_file.name.endswith(".xlsx"):
             df_excel = pd.read_excel(uploaded_file)
-            
-            # Limpieza robusta de nombres de columnas y strings (Soluciona el problema de espacios en 'Jhony Moreno ')
             df_excel.columns = df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
 
             nuevo_df = pd.DataFrame()
@@ -318,6 +313,7 @@ with tab_general:
               df_excel[col] = df_excel[col].astype(str).str.strip()
               df_excel[col] = df_excel[col].replace({"nan": "", "None": ""})
 
+            # Mapeo exacto evitando desvíos por columnas eliminadas o nombres con espacios
             mapping_cols = {
                 "Vendedor": "Vendedor",
                 "Nro de Ruta": "Nro de Ruta (Ventas)",
@@ -329,7 +325,6 @@ with tab_general:
                 "Mercaderia": "Mercaderia",
                 "Mercaderista": "Mercaderista",
                 "Nro de Ruta Mercaderista": "Nro de Ruta (Mercaderia)",
-                "Tiempo de Mercaderia": "Tiempo de Mercaderia",
                 "Día de Visita Semana 1": "Día de Visita Semana 1",
                 "Día de Visita Semana 2": "Día de Visita Semana 2",
                 "Día de Mercaderia Semana 1": "Día de Mercaderia Semana 1",
@@ -337,9 +332,8 @@ with tab_general:
             }
 
             for col_target in columnas_clientes:
-              if col_target not in df_excel.columns and col_target not in nuevo_df.columns:
+              if col_target not in nuevo_df.columns:
                 nuevo_df[col_target] = ""
-                continue
               if col_target == "Nro":
                 continue
 
@@ -351,28 +345,17 @@ with tab_general:
                   break
 
               if not encontrada:
-                match_encontrado = False
                 for col_excel in df_excel.columns:
-                  col_limpia = " ".join(col_excel.split())
-                  target_limpia = " ".join(col_target.split())
-                  if col_limpia.lower() == target_limpia.lower():
+                  if " ".join(col_excel.split()).lower() == " ".join(col_target.split()).lower():
                     nuevo_df[col_target] = df_excel[col_excel]
-                    match_encontrado = True
                     break
-
-                if not match_encontrado:
-                  if col_target in df_excel.columns:
-                    nuevo_df[col_target] = df_excel[col_target]
-                  else:
-                    if col_target not in nuevo_df.columns:
-                      nuevo_df[col_target] = ""
 
             for c in ["Semana 1", "Semana 2", "Mercaderia"]:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
             st.session_state["df_clientes"] = nuevo_df
-            st.success("¡Archivo Excel procesado con éxito y vendedores sincronizados correctamente!")
+            st.success("¡Archivo Excel procesado con éxito y perfectamente alineado!")
           else:
             prompt = f"""
                     Actúa como un experto en extracción de datos logísticos.
@@ -418,7 +401,6 @@ with tab_general:
     ]
     df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c not in columnas_excluir_vista_general]].copy()
 
-    # Uso de st.form integrado para evitar recargas constantes por cada celda editada
     with st.form("form_cuadro_maestro"):
       edited_df_visible = st.data_editor(
           df_general_visible, num_rows="dynamic", use_container_width=True, key="editor_clientes_general", hide_index=True,
@@ -427,10 +409,9 @@ with tab_general:
               "Vendedor": st.column_config.SelectboxColumn("Vendedor", options=lista_vend_opciones),
               "Semana 1": st.column_config.SelectboxColumn("Semana 1", options=["Sí", "No"]),
               "Semana 2": st.column_config.SelectboxColumn("Semana 2", options=["Sí", "No"]),
-              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24 HORAS", "48 HORAS"]),
+              "Tiempo de Despacho": st.column_config.SelectboxColumn("Tiempo Despacho", options=["24h", "48h", "24 HORAS", "48 HORAS"]),
               "Mercaderia": st.column_config.SelectboxColumn("Mercaderia", options=["Sí", "No"]),
               "Mercaderista": st.column_config.SelectboxColumn("Mercaderista", options=lista_merc_opciones),
-              "Tiempo de Mercaderia": st.column_config.SelectboxColumn("Tiempo Mercaderia", options=["48 HORAS", "72 HORAS"]),
           }
       )
 
@@ -555,7 +536,6 @@ with tab_ruta_vendedores:
             dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
 
         mask_vendedor = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()
-        col_dia_filtro = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
         df_filtrado = df_seguimiento[mask_vendedor].copy()
 
         if not df_filtrado.empty:
@@ -580,7 +560,7 @@ with tab_ruta_despacho:
         for _, r in df_despachos.iterrows():
             cliente_val = r.get("Cliente", "No aplica")
             ubicacion_val = r.get("Ubicacion", "No aplica")
-            tiempo_desp = r.get("Tiempo de Despacho", "24 HORAS")
+            tiempo_desp = r.get("Tiempo de Despacho", "24h")
             for s_col in ["Día de Visita Semana 1", "Día de Visita Semana 2"]:
                 dia_v = r.get(s_col, "")
                 if dia_v and str(dia_v).strip() not in ["", "nan", "None", "No asignado"]:
