@@ -163,7 +163,7 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
-# Columnas principales limpias (sin las columnas S4, S3, S2, S1 innecesarias en el cuadro maestro)
+# Columnas estrictas del Cuadro Maestro limpio
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
@@ -389,7 +389,7 @@ with tab_general:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
-            st.session_state["df_clientes"] = nuevo_df
+            st.session_state["df_clientes"] = nuevo_df[columnas_clientes]
             st.success("¡Archivo Excel procesado con éxito y normalizado!")
           else:
             prompt = f"""
@@ -454,6 +454,7 @@ with tab_general:
     if not lista_tiempos_opciones:
         lista_tiempos_opciones = ["24 horas", "48 horas"]
 
+    # Asegurar que solo se visualicen las columnas estrictamente permitidas
     df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
 
     # Filtrar en tiempo real si el usuario escribe en la barra de búsqueda rápida
@@ -521,16 +522,20 @@ with tab_general:
                   df_actualizado.at[idx, "Mercaderista"] = df_m.iloc[pos_vendedor]["Mercaderista"]
                   df_actualizado.at[idx, "Nro de Ruta (Mercaderia)"] = df_m.iloc[pos_vendedor]["Nro de Ruta"]
 
-        st.session_state["df_clientes"] = df_actualizado
-        guardar_en_base_de_datos(df_actualizado)
+        st.session_state["df_clientes"] = df_actualizado[columnas_clientes]
+        guardar_en_base_de_datos(st.session_state["df_clientes"])
         st.rerun()
 
     st.markdown("---")
     st.subheader("📥 Descargar Reporte en Excel")
     
+    # Filtrado estricto para que la descarga exporte exclusivamente las columnas limpias permitidas
+    df_exportar = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
+    
     output_excel = io.BytesIO()
     with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
-      st.session_state["df_clientes"].to_excel(writer, index=False, sheet_name="Cuadro Maestro")
+      df_exportar.to_excel(writer, index=False, sheet_name="Cuadro Maestro")
+      
     st.download_button(
         label="📥 Descargar Cuadro Maestro (.xlsx)",
         data=output_excel.getvalue(),
