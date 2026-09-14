@@ -140,65 +140,70 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# FUNCIÓN DE GENERACIÓN DE PDF LOGÍSTICO (DOS SEMANAS, SIN SÍ/NO)
+# GENERACIÓN DE REPORTES EN HTML ESTILIZADO
 # ==========================================
-def generar_pdf_rutas(df_rutas, vendedor_seleccionado=None):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=landscape(letter),
-        rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20
-    )
-    
-    elementos = []
-    estilos = getSampleStyleSheet()
-    
-    estilo_titulo = ParagraphStyle(
-        'TituloLogistico',
-        parent=estilos['Heading1'],
-        fontSize=14,
-        textColor=colors.HexColor('#1f2937'),
-        spaceAfter=15,
-        alignment=1
-    )
-    
-    titulo_texto = f"Descarga de Rutas - {vendedor_seleccionado} (Formato Logístico Completo)" if vendedor_seleccionado else "Descarga de Rutas - Todos los Vendedores (Formato Logístico Completo)"
-    elementos.append(Paragraph(titulo_texto, estilo_titulo))
-    elementos.append(Spacer(1, 10))
-    
-    df_filtrado = df_rutas.copy()
+def generar_html_rutas_vendedor(df_rutas, vendedor_seleccionado=None):
+    df_f = df_rutas.copy()
     if vendedor_seleccionado:
-        df_filtrado = df_filtrado[df_filtrado["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
+        df_f = df_f[df_f["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
     
-    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo para reflejar el formato limpio
-    cols_excluir = [c for c in df_filtrado.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
-    df_limpio = df_filtrado.drop(columns=[c for c in cols_excluir if c in df_filtrado.columns])
-    
-    df_limpio = df_limpio.fillna("").astype(str)
-    
-    if df_limpio.empty:
-        elementos.append(Paragraph("No hay registros para mostrar en esta selección.", estilos['Normal']))
-    else:
-        data = [list(df_limpio.columns)] + df_limpio.values.tolist()
-        
-        tabla_pdf = Table(data, repeatRows=1)
-        tabla_pdf.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ]))
-        elementos.append(tabla_pdf)
-        
-    doc.build(elementos)
-    buffer.seek(0)
-    return buffer.getvalue()
+    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo
+    cols_excluir = [c for c in df_f.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
+    df_f = df_f.drop(columns=[c for c in cols_excluir if c in df_f.columns]).fillna("")
+
+    titulo = f"Reporte Logístico de Rutas - {vendedor_seleccionado}" if vendedor_seleccionado else "Reporte Logístico de Rutas - Todos los Vendedores"
+
+    html_tabla = df_f.to_html(index=False, classes="table-logistic", border=0)
+
+    html_code = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #0e1117;
+                color: #ffffff;
+                margin: 20px;
+            }}
+            h2 {{
+                color: #f3f4f6;
+                border-bottom: 2px solid #374151;
+                padding-bottom: 10px;
+            }}
+            .table-logistic {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 12px;
+                background-color: #1f2937;
+            }}
+            .table-logistic th {{
+                background-color: #374151;
+                color: #ffffff;
+                padding: 10px;
+                text-align: left;
+                border: 1px solid #4b5563;
+            }}
+            .table-logistic td {{
+                padding: 8px 10px;
+                border: 1px solid #374151;
+                color: #d1d5db;
+            }}
+            .table-logistic tr:nth-child(even) {{
+                background-color: #111827;
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>{titulo}</h2>
+        <p>Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        {html_tabla}
+    </body>
+    </html>
+    """
+    return html_code
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -744,34 +749,32 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico en PDF)")
+    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico en HTML)")
     
     col_dl_1, col_dl_2 = st.columns(2)
     
     with col_dl_1:
-        # Descarga Ruta Todos los Vendedores en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
-        if st.button("📥 Descargar Ruta Todos los Vendedores (.pdf)", use_container_width=True):
-            pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=None)
-            st.download_button(
-                label="⬇️ Guardar Archivo: Ruta Completa (PDF)",
-                data=pdf_bytes,
-                file_name="Ruta_Todos_Vendedores_Formato_Logistico.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        # Descarga Ruta Todos los Vendedores en HTML estilizado
+        html_todos = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=None)
+        st.download_button(
+            label="📥 Descargar Ruta Todos los Vendedores (.html)",
+            data=html_todos,
+            file_name="Ruta_Todos_Vendedores_Formato_Logistico.html",
+            mime="text/html",
+            use_container_width=True
+        )
 
     with col_dl_2:
-        # Descarga Ruta por Vendedor Específico en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
+        # Descarga Ruta por Vendedor Específico en HTML estilizado
         vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
-        if st.button(f"📥 Descargar Ruta de {vendedor_a_descargar} (.pdf)", use_container_width=True):
-            pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
-            st.download_button(
-                label=f"⬇️ Guardar Archivo: Ruta de {vendedor_a_descargar} (PDF)",
-                data=pdf_bytes,
-                file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_Formato_Logistico.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        html_vendedor = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
+        st.download_button(
+            label=f"📥 Descargar Ruta de {vendedor_a_descargar} (.html)",
+            data=html_vendedor,
+            file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_Formato_Logistico.html",
+            mime="text/html",
+            use_container_width=True
+        )
 
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
