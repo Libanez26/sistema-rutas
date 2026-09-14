@@ -307,14 +307,72 @@ with tab_general:
         try:
           if uploaded_file.name.endswith(".xlsx"):
             df_excel = pd.read_excel(uploaded_file)
+            
+            # Limpieza robusta de nombres de columnas y strings (Soluciona el problema de espacios en 'Jhony Moreno ')
             df_excel.columns = df_excel.columns.str.replace(r"\s+", " ", regex=True).str.strip()
+
             nuevo_df = pd.DataFrame()
             nuevo_df["Nro"] = range(1, len(df_excel) + 1)
-            for col in columnas_clientes:
-                if col != "Nro":
-                    nuevo_df[col] = df_excel[col] if col in df_excel.columns else ""
+
+            for col in df_excel.select_dtypes(include=["object"]).columns:
+              df_excel[col] = df_excel[col].astype(str).str.strip()
+              df_excel[col] = df_excel[col].replace({"nan": "", "None": ""})
+
+            mapping_cols = {
+                "Vendedor": "Vendedor",
+                "Nro de Ruta": "Nro de Ruta (Ventas)",
+                "Cliente": "Cliente",
+                "Ubicacion": "Ubicacion",
+                "Semana 1": "Semana 1",
+                "Semana 2": "Semana 2",
+                "Tiempo de Despacho": "Tiempo de Despacho",
+                "Mercaderia": "Mercaderia",
+                "Mercaderista": "Mercaderista",
+                "Nro de Ruta Mercaderista": "Nro de Ruta (Mercaderia)",
+                "Tiempo de Mercaderia": "Tiempo de Mercaderia",
+                "Día de Visita Semana 1": "Día de Visita Semana 1",
+                "Día de Visita Semana 2": "Día de Visita Semana 2",
+                "Día de Mercaderia Semana 1": "Día de Mercaderia Semana 1",
+                "Día de Mercaderia Semana 2": "Día de Mercaderia Semana 2",
+            }
+
+            for col_target in columnas_clientes:
+              if col_target not in df_excel.columns and col_target not in nuevo_df.columns:
+                nuevo_df[col_target] = ""
+                continue
+              if col_target == "Nro":
+                continue
+
+              encontrada = False
+              for orig, dest in mapping_cols.items():
+                if dest == col_target and orig in df_excel.columns:
+                  nuevo_df[col_target] = df_excel[orig]
+                  encontrada = True
+                  break
+
+              if not encontrada:
+                match_encontrado = False
+                for col_excel in df_excel.columns:
+                  col_limpia = " ".join(col_excel.split())
+                  target_limpia = " ".join(col_target.split())
+                  if col_limpia.lower() == target_limpia.lower():
+                    nuevo_df[col_target] = df_excel[col_excel]
+                    match_encontrado = True
+                    break
+
+                if not match_encontrado:
+                  if col_target in df_excel.columns:
+                    nuevo_df[col_target] = df_excel[col_target]
+                  else:
+                    if col_target not in nuevo_df.columns:
+                      nuevo_df[col_target] = ""
+
+            for c in ["Semana 1", "Semana 2", "Mercaderia"]:
+              if c in nuevo_df.columns:
+                nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
+
             st.session_state["df_clientes"] = nuevo_df
-            st.success("¡Archivo Excel procesado con éxito!")
+            st.success("¡Archivo Excel procesado con éxito y vendedores sincronizados correctamente!")
           else:
             prompt = f"""
                     Actúa como un experto en extracción de datos logísticos.
