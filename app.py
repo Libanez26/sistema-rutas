@@ -167,7 +167,9 @@ columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
     "Tiempo de Despacho", "Mercaderia", "Mercaderista", "Nro de Ruta (Mercaderia)",
-    "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2"
+    "Día de Mercaderia Semana 1", "Día de Mercaderia Semana 2",
+    "Visita_S1", "Pedido_S1", "Motivo_Pedido_S1",
+    "Visita_S2", "Pedido_S2", "Motivo_Pedido_S2"
 ]
 
 # Carga de personal y tiempos
@@ -241,7 +243,7 @@ if st.session_state["df_clientes"].empty:
           df_temp = df_temp.drop(columns=["id"])
         for col in columnas_clientes:
           if col not in df_temp.columns:
-            df_temp[col] = ""
+            df_temp[col] = False if "Visita" in col or "Pedido" in col else ""
         st.session_state["df_clientes"] = df_temp[columnas_clientes]
       else:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
@@ -362,7 +364,8 @@ with tab_general:
                 "Día de Mercaderia Semana 2": "Día de Mercaderia Semana 2",
             }
 
-            for col_target in columnas_clientes:
+            base_cols_maestro = [c for c in columnas_clientes if not c.startswith("Visita_") and not c.startswith("Pedido_") and not c.startswith("Motivo_")]
+            for col_target in base_cols_maestro:
               if col_target not in nuevo_df.columns:
                 nuevo_df[col_target] = ""
               if col_target == "Nro":
@@ -388,6 +391,10 @@ with tab_general:
               if c in nuevo_df.columns:
                 nuevo_df[c] = nuevo_df[c].replace({"Si": "Sí", "si": "Sí", "SI": "Sí", "no": "No", "NO": "No"})
 
+            for c in columnas_clientes:
+                if c not in nuevo_df.columns:
+                    nuevo_df[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
+
             st.session_state["df_clientes"] = nuevo_df[columnas_clientes]
             st.success("¡Archivo Excel procesado con éxito y normalizado!")
           else:
@@ -403,7 +410,7 @@ with tab_general:
             df_ia = pd.DataFrame(data)
             for col in columnas_clientes:
               if col not in df_ia.columns:
-                df_ia[col] = ""
+                df_ia[col] = False if ("Visita_" in col or "Pedido_" in col) else ""
             st.session_state["df_clientes"] = df_ia[columnas_clientes]
             st.success("¡Datos del PDF extraídos e integrados con éxito!")
         except Exception as e:
@@ -447,7 +454,8 @@ with tab_general:
     if not lista_tiempos_opciones:
         lista_tiempos_opciones = ["24 horas", "48 horas"]
 
-    df_general_visible = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
+    base_cols_maestro = [c for c in columnas_clientes if not c.startswith("Visita_") and not c.startswith("Pedido_") and not c.startswith("Motivo_")]
+    df_general_visible = st.session_state["df_clientes"][[c for c in base_cols_maestro if c in st.session_state["df_clientes"].columns]].copy()
 
     if texto_busqueda:
         mask_busqueda = df_general_visible.astype(str).apply(lambda row: row.str.contains(texto_busqueda, case=False, na=False).any(), axis=1)
@@ -538,7 +546,7 @@ with tab_ruta_vendedores:
     st.header("🚚 Seguimiento de Ruta de Vendedores")
     df_seguimiento = st.session_state["df_clientes"].copy()
     
-    # Selector de Semana y Día arriba (sin selector individual de vendedor)
+    # Selector de Semana y Día arriba
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
@@ -549,39 +557,52 @@ with tab_ruta_vendedores:
     
     if vendedores_disponibles:
         st.markdown("---")
-        # Dividir la pantalla en columnas (una por cada vendedor)
+        # Dividir la pantalla en columnas (una por cada vendedor en paralelo)
         cols_vendedores = st.columns(len(vendedores_disponibles))
         
         for idx, vendedor in enumerate(vendedores_disponibles):
             with cols_vendedores[idx]:
                 st.subheader(f"👤 {vendedor}")
                 
-                # Filtrar registros para este vendedor
                 mask_v = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor.strip()
                 df_v_filtrado = df_seguimiento[mask_v].copy()
                 
-                # Columnas específicas a mostrar para el seguimiento
-                col_visita_campo = "Día de Visita Semana 1" if semana_seleccionada == "Semana 1" else "Día de Visita Semana 2"
-                col_visita_estatus = "Visita_S1" # o campo correspondiente
-                col_pedido_estatus = "Pedido_S1"
-                col_motivo_estatus = "Motivo_Pedido_S1"
+                # Definir nombres de columnas dinámicos según la semana seleccionada
+                s_num = "1" if semana_seleccionada == "Semana 1" else "2"
+                col_visita_campo = f"Día de Visita Semana {s_num}"
+                col_visita_estatus = f"Visita_S{s_num}"
+                col_pedido_estatus = f"Pedido_S{s_num}"
+                col_motivo_estatus = f"Motivo_Pedido_S{s_num}"
                 
-                cols_view = ["Nro", "Cliente", "Ubicacion", "Nro de Ruta (Ventas)", col_visita_estatus, col_pedido_estatus, col_motivo_estatus]
+                # Filtrar solo los clientes que corresponden al día de visita seleccionado en esa semana
+                if col_visita_campo in df_v_filtrado.columns and dia_seleccionado:
+                    df_v_filtrado = df_v_filtrado[
+                        df_v_filtrado[col_visita_campo].astype(str).str.contains(dia_seleccionado, case=False, na=False)
+                    ]
+                
+                cols_view = ["Nro", "Cliente", "Ubicacion", col_visita_estatus, col_pedido_estatus, col_motivo_estatus]
                 for c in cols_view:
                     if c not in df_v_filtrado.columns:
-                        df_v_filtrado[c] = ""
+                        df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
                 
-                # Editor interactivo para este vendedor en su columna
+                # Asegurar tipos booleanos para las casillas de verificación
+                for c in [col_visita_estatus, col_pedido_estatus]:
+                    df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
+
+                # Editor interactivo con casillas de verificación (checkboxes)
                 df_editado_col = st.data_editor(
                     df_v_filtrado[cols_view], 
                     use_container_width=True, 
                     hide_index=True, 
-                    key=f"ed_vendedor_{idx}"
+                    key=f"ed_vendedor_{idx}_{semana_seleccionada}_{dia_seleccionado}",
+                    column_config={
+                        col_visita_estatus: st.column_config.CheckboxColumn("¿Visitado?", default=False),
+                        col_pedido_estatus: st.column_config.CheckboxColumn("¿Pedido?", default=False),
+                    }
                 )
                 
                 # Botón de guardado individual por columna/vendedor
-                if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}", use_container_width=True):
-                    # Actualizar los datos globales con los cambios de este vendedor
+                if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}_{semana_seleccionada}_{dia_seleccionado}", use_container_width=True):
                     for r_idx, row_edit in df_editado_col.iterrows():
                         nro_val = row_edit.get("Nro")
                         match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
