@@ -4,7 +4,7 @@ import time
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
-from datetime import datetime, timedelta
+from datetime import datetime
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -65,8 +65,6 @@ def inicializar_estado_global():
         st.session_state["df_tiempos"] = pd.DataFrame()
     if "df_clientes" not in st.session_state:
         st.session_state["df_clientes"] = pd.DataFrame()
-    if "historial_semana_previa" not in st.session_state:
-        st.session_state["historial_semana_previa"] = {"semana": "Semana 1", "fecha": datetime.now().date()}
 
 inicializar_estado_global()
 
@@ -90,10 +88,6 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 def normalizar_dia(dia):
-    """
-    Corrige errores ortográficos, mayúsculas, tildes y variaciones 
-    en los días de la semana (ej: miercoles -> Miércoles).
-    """
     if pd.isna(dia) or not dia:
         return ""
     
@@ -140,7 +134,7 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# FUNCIÓN DE GENERACIÓN DE PDF LOGÍSTICO (DOS SEMANAS, SIN SÍ/NO)
+# FUNCIÓN DE GENERACIÓN DE PDF LOGÍSTICO
 # ==========================================
 def generar_pdf_rutas(df_rutas, vendedor_seleccionado=None):
     buffer = io.BytesIO()
@@ -170,17 +164,14 @@ def generar_pdf_rutas(df_rutas, vendedor_seleccionado=None):
     if vendedor_seleccionado:
         df_filtrado = df_filtrado[df_filtrado["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
     
-    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo para reflejar el formato limpio
     cols_excluir = [c for c in df_filtrado.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
     df_limpio = df_filtrado.drop(columns=[c for c in cols_excluir if c in df_filtrado.columns])
-    
     df_limpio = df_limpio.fillna("").astype(str)
     
     if df_limpio.empty:
         elementos.append(Paragraph("No hay registros para mostrar en esta selección.", estilos['Normal']))
     else:
         data = [list(df_limpio.columns)] + df_limpio.values.tolist()
-        
         tabla_pdf = Table(data, repeatRows=1)
         tabla_pdf.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
@@ -514,7 +505,7 @@ with tab_general:
 
     st.markdown("---")
 
-    with st.expander("👁️ Configuración de Vendedores, Mercaderistas y Tiempos de Despacho (Ocultar / Mostrar)", expanded=True):
+    with st.expander("👁️ Configuración de Vendedores, Mercaderistas y Tiempos de Despacho", expanded=True):
         col_vend, col_merc, col_tiem = st.columns(3)
         
         with col_vend:
@@ -539,7 +530,7 @@ with tab_general:
     st.markdown("---")
     st.subheader("Cuadro Maestro de Clientes")
     
-    texto_busqueda = st.text_input("🔍 Búsqueda rápida (Ctrl+B / Escribe cliente, mercaderista, ruta...):", placeholder="Ej: Ruta 01, La Muralla, Yorsin, Caracas...")
+    texto_busqueda = st.text_input("🔍 Búsqueda rápida:", placeholder="Ej: Ruta 01, La Muralla, Yorsin, Caracas...")
 
     lista_vend_opciones = st.session_state["df_vendedores"]["Vendedor"].dropna().tolist()
     lista_merc_opciones = st.session_state["df_mercaderistas"]["Mercaderista"].dropna().tolist()
@@ -556,7 +547,7 @@ with tab_general:
     if texto_busqueda:
         mask_busqueda = df_general_visible.astype(str).apply(lambda row: row.str.contains(texto_busqueda, case=False, na=False).any(), axis=1)
         df_general_visible = df_general_visible[mask_busqueda]
-        st.caption(f"Mostrando **{len(df_general_visible)}** resultados coincidentes con la búsqueda.")
+        st.caption(f"Mostrando **{len(df_general_visible)}** resultados coincidentes.")
 
     with st.form("form_cuadro_maestro"):
       edited_df_visible = st.data_editor(
@@ -600,19 +591,6 @@ with tab_general:
                   df_actualizado[col] = edited_df_visible[col]
 
         if not df_actualizado.empty:
-          if len(df_actualizado) > 1 and not texto_busqueda:
-            ultima_fila = df_actualizado.iloc[-1]
-            cliente_val = ultima_fila.get("Cliente", "")
-            if pd.isna(cliente_val) or str(cliente_val).strip() == "":
-              fila_anterior = df_actualizado.iloc[-2].copy()
-              for col in df_actualizado.columns:
-                if col != "Cliente" and col != "Nro":
-                  df_actualizado.at[df_actualizado.index[-1], col] = fila_anterior[col]
-              try:
-                df_actualizado.at[df_actualizado.index[-1], "Nro"] = int(fila_anterior["Nro"]) + 1
-              except:
-                pass
-
           df_v = st.session_state["df_vendedores"]
           df_m = st.session_state["df_mercaderistas"]
 
@@ -633,9 +611,7 @@ with tab_general:
 
     st.markdown("---")
     st.subheader("📥 Descargar Reporte en Excel")
-    
     df_exportar = st.session_state["df_clientes"][[c for c in columnas_clientes if c in st.session_state["df_clientes"].columns]].copy()
-    
     output_excel = io.BytesIO()
     with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
       df_exportar.to_excel(writer, index=False, sheet_name="Cuadro Maestro")
@@ -649,97 +625,40 @@ with tab_general:
     )
 
 with tab_ruta_vendedores:
-    st.header("🚚 Seguimiento de Ruta de Vendedores")
+    st.header("🚚 Seguimiento y Resumen de Rutas de Vendedores")
     df_seguimiento = st.session_state["df_clientes"].copy()
     
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
-    with col_f2:
-        dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"])
+    # Selector de Semana global para organizar de forma limpia abarcando todos los vendedores, clientes y ubicación
+    semana_resumen = st.selectbox("Seleccionar Semana para la Vista de Rutas", ["Semana 1", "Semana 2"], key="sel_sem_resumen_global")
 
-    # Obtener los vendedores ordenados según la tabla de configuración de personal
+    # Obtener los vendedores ordenados según la configuración de personal
     if not st.session_state["df_vendedores"].empty and "Vendedor" in st.session_state["df_vendedores"].columns:
         orden_config = [str(v).strip() for v in st.session_state["df_vendedores"]["Vendedor"].dropna() if str(v).strip() != ""]
         vendedores_en_datos = list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""})
-        
         vendedores_disponibles = [v for v in orden_config if v in vendedores_en_datos] + [v for v in vendedores_en_datos if v not in orden_config]
     else:
         vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
     
     if vendedores_disponibles:
-        st.markdown("---")
-        cols_vendedores = st.columns(len(vendedores_disponibles))
+        st.markdown(f"### 📅 {semana_resumen} - Todos los Vendedores, Clientes y Ubicaciones")
         
-        for idx, vendedor in enumerate(vendedores_disponibles):
-            with cols_vendedores[idx]:
-                st.subheader(f"👤 {vendedor}")
-                
-                mask_v = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor.strip()
-                df_v_filtrado = df_seguimiento[mask_v].copy()
-                
-                s_num = "1" if semana_seleccionada == "Semana 1" else "2"
-                col_visita_campo = f"Día de Visita Semana {s_num}"
-                col_visita_estatus = f"Visita_S{s_num}"
-                col_pedido_estatus = f"Pedido_S{s_num}"
-                col_motivo_estatus = f"Motivo_Pedido_S{s_num}"
-                
-                if col_visita_campo in df_v_filtrado.columns:
-                    df_v_filtrado[col_visita_campo] = df_v_filtrado[col_visita_campo].apply(normalizar_dia)
-                
-                if col_visita_campo in df_v_filtrado.columns and dia_seleccionado:
-                    df_v_filtrado = df_v_filtrado[
-                        df_v_filtrado[col_visita_campo].astype(str).str.contains(dia_seleccionado, case=False, na=False)
-                    ]
-                
-                cols_view = ["Nro", "Cliente", "Ubicacion", col_visita_estatus, col_pedido_estatus, col_motivo_estatus]
-                for c in cols_view:
-                    if c not in df_v_filtrado.columns:
-                        df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
-                
-                for c in [col_visita_estatus, col_pedido_estatus]:
-                    if c in df_v_filtrado.columns:
-                        df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
-                    else:
-                        df_v_filtrado[c] = False
-
-                for c in [col_motivo_estatus]:
-                    if c in df_v_filtrado.columns:
-                        df_v_filtrado[c] = df_v_filtrado[c].apply(
-                            lambda x: "" if pd.isna(x) or x is False or str(x).lower() in ["false", "none", "nan"] else str(x)
-                        ).astype(str)
-                    else:
-                        df_v_filtrado[c] = ""
-
-                df_editado_col = st.data_editor(
-                    df_v_filtrado[cols_view], 
-                    use_container_width=True, 
-                    hide_index=True, 
-                    key=f"ed_vendedor_{idx}_{semana_seleccionada}_{dia_seleccionado}",
-                    column_config={
-                        col_visita_estatus: st.column_config.CheckboxColumn("¿Visitado?", default=False),
-                        col_pedido_estatus: st.column_config.CheckboxColumn("¿Pedido?", default=False),
-                        col_motivo_estatus: st.column_config.TextColumn("Motivo / Observación", default=""),
-                    }
-                )
-                
-                if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}_{semana_seleccionada}_{dia_seleccionado}", use_container_width=True):
-                    for r_idx, row_edit in df_editado_col.iterrows():
-                        nro_val = row_edit.get("Nro")
-                        match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
-                        if not match_global.empty:
-                            g_idx = match_global.index[0]
-                            for col_chk in [col_visita_estatus, col_pedido_estatus, col_motivo_estatus]:
-                                if col_chk not in st.session_state["df_clientes"].columns:
-                                    st.session_state["df_clientes"][col_chk] = False if ("Visita_" in col_chk or "Pedido_" in col_chk) else ""
-                            
-                            st.session_state["df_clientes"].at[g_idx, col_visita_estatus] = row_edit[col_visita_estatus]
-                            st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = row_edit[col_pedido_estatus]
-                            st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = row_edit[col_motivo_estatus]
+        # Iterar organizando: Semana -> Vendedores -> Clientes y Ubicación
+        for vendedor in vendedores_disponibles:
+            df_vend = df_seguimiento[df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor.strip()]
+            
+            if not df_vend.empty:
+                with st.expander(f"👤 Vendedor: {vendedor} ({len(df_vend)} clientes asignados)", expanded=True):
+                    col_dia_sem = "Día de Visita Semana 1" if semana_resumen == "Semana 1" else "Día de Visita Semana 2"
                     
-                    guardar_en_base_de_datos(st.session_state["df_clientes"])
-                    st.success(f"¡Ruta de {vendedor} guardada con éxito!")
-                    st.rerun()
+                    # Mostrar exactamente lo que pediste: Vendedor abarcando todos los clientes, clientes y ubicación
+                    cols_mostrar = ["Nro", "Cliente", "Ubicacion", col_dia_sem]
+                    df_tabla_visible = df_vend[[c for c in cols_mostrar if c in df_vend.columns]].copy()
+                    
+                    st.dataframe(
+                        df_tabla_visible,
+                        use_container_width=True,
+                        hide_index=True
+                    )
     else:
         st.info("No hay vendedores con rutas asignadas.")
 
@@ -749,7 +668,6 @@ with tab_ruta_vendedores:
     col_dl_1, col_dl_2 = st.columns(2)
     
     with col_dl_1:
-        # Descarga Ruta Todos los Vendedores en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
         if st.button("📥 Descargar Ruta Todos los Vendedores (.pdf)", use_container_width=True):
             pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=None)
             st.download_button(
@@ -761,7 +679,6 @@ with tab_ruta_vendedores:
             )
 
     with col_dl_2:
-        # Descarga Ruta por Vendedor Específico en PDF (Ambas semanas integradas, sin columnas de sí/no o control)
         vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
         if st.button(f"📥 Descargar Ruta de {vendedor_a_descargar} (.pdf)", use_container_width=True):
             pdf_bytes = generar_pdf_rutas(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
