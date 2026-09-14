@@ -163,6 +163,7 @@ else:
 # ==========================================
 st.title("Sistema Integral de Gestión de Rutas")
 
+# Definición completa y unificada de columnas para evitar KeyErrors
 columnas_clientes = [
     "Nro", "Vendedor", "Nro de Ruta (Ventas)", "Cliente", "Ubicacion",
     "Semana 1", "Semana 2", "Día de Visita Semana 1", "Día de Visita Semana 2",
@@ -243,7 +244,7 @@ if st.session_state["df_clientes"].empty:
           df_temp = df_temp.drop(columns=["id"])
         for col in columnas_clientes:
           if col not in df_temp.columns:
-            df_temp[col] = False if "Visita" in col or "Pedido" in col else ""
+            df_temp[col] = False if ("Visita_" in col or "Pedido_" in col) else ""
         st.session_state["df_clientes"] = df_temp[columnas_clientes]
       else:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
@@ -481,6 +482,11 @@ with tab_general:
       if submitted:
         df_actualizado = st.session_state["df_clientes"].copy()
         
+        # Asegurarse de que todas las columnas de columnas_clientes existan en df_actualizado antes de actualizar
+        for col_c in columnas_clientes:
+            if col_c not in df_actualizado.columns:
+                df_actualizado[col_c] = False if ("Visita_" in col_c or "Pedido_" in col_c) else ""
+
         if texto_busqueda:
             for idx, row in edited_df_visible.iterrows():
                 nro_cliente = row.get("Nro")
@@ -546,7 +552,6 @@ with tab_ruta_vendedores:
     st.header("🚚 Seguimiento de Ruta de Vendedores")
     df_seguimiento = st.session_state["df_clientes"].copy()
     
-    # Selector de Semana y Día arriba
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         semana_seleccionada = st.selectbox("Seleccionar Semana", ["Semana 1", "Semana 2"])
@@ -557,7 +562,6 @@ with tab_ruta_vendedores:
     
     if vendedores_disponibles:
         st.markdown("---")
-        # Dividir la pantalla en columnas (una por cada vendedor en paralelo)
         cols_vendedores = st.columns(len(vendedores_disponibles))
         
         for idx, vendedor in enumerate(vendedores_disponibles):
@@ -567,14 +571,12 @@ with tab_ruta_vendedores:
                 mask_v = df_seguimiento["Vendedor"].astype(str).str.strip() == vendedor.strip()
                 df_v_filtrado = df_seguimiento[mask_v].copy()
                 
-                # Definir nombres de columnas dinámicos según la semana seleccionada
                 s_num = "1" if semana_seleccionada == "Semana 1" else "2"
                 col_visita_campo = f"Día de Visita Semana {s_num}"
                 col_visita_estatus = f"Visita_S{s_num}"
                 col_pedido_estatus = f"Pedido_S{s_num}"
                 col_motivo_estatus = f"Motivo_Pedido_S{s_num}"
                 
-                # Filtrar solo los clientes que corresponden al día de visita seleccionado en esa semana
                 if col_visita_campo in df_v_filtrado.columns and dia_seleccionado:
                     df_v_filtrado = df_v_filtrado[
                         df_v_filtrado[col_visita_campo].astype(str).str.contains(dia_seleccionado, case=False, na=False)
@@ -585,11 +587,9 @@ with tab_ruta_vendedores:
                     if c not in df_v_filtrado.columns:
                         df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
                 
-                # Asegurar tipos booleanos para las casillas de verificación
                 for c in [col_visita_estatus, col_pedido_estatus]:
                     df_v_filtrado[c] = df_v_filtrado[c].fillna(False).astype(bool)
 
-                # Editor interactivo con casillas de verificación (checkboxes)
                 df_editado_col = st.data_editor(
                     df_v_filtrado[cols_view], 
                     use_container_width=True, 
@@ -601,13 +601,17 @@ with tab_ruta_vendedores:
                     }
                 )
                 
-                # Botón de guardado individual por columna/vendedor
                 if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}_{semana_seleccionada}_{dia_seleccionado}", use_container_width=True):
                     for r_idx, row_edit in df_editado_col.iterrows():
                         nro_val = row_edit.get("Nro")
                         match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
                         if not match_global.empty:
                             g_idx = match_global.index[0]
+                            # Asegurarse de que existan las columnas en df_clientes antes de actualizar
+                            for col_chk in [col_visita_estatus, col_pedido_estatus, col_motivo_estatus]:
+                                if col_chk not in st.session_state["df_clientes"].columns:
+                                    st.session_state["df_clientes"][col_chk] = False if ("Visita_" in col_chk or "Pedido_" in col_chk) else ""
+                            
                             st.session_state["df_clientes"].at[g_idx, col_visita_estatus] = row_edit[col_visita_estatus]
                             st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = row_edit[col_pedido_estatus]
                             st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = row_edit[col_motivo_estatus]
