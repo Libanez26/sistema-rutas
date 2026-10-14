@@ -151,39 +151,20 @@ def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle(
-        'TitleStyle',
-        parent=styles['Heading1'],
-        fontSize=10,
-        textColor=colors.HexColor('#1f2937'),
-        alignment=1,
-        spaceAfter=2
+        'TitleStyle', parent=styles['Heading1'], fontSize=10,
+        textColor=colors.HexColor('#1f2937'), alignment=1, spaceAfter=2
     )
-    
     section_style = ParagraphStyle(
-        'SectionStyle',
-        parent=styles['Heading3'],
-        fontSize=7.5,
-        textColor=colors.HexColor('#1f2937'),
-        fontName="Helvetica-Bold",
-        spaceAfter=1
+        'SectionStyle', parent=styles['Heading3'], fontSize=7.5,
+        textColor=colors.HexColor('#1f2937'), fontName="Helvetica-Bold", spaceAfter=1
     )
-    
     cell_style = ParagraphStyle(
-        'CellStyle',
-        parent=styles['Normal'],
-        fontSize=5.5,
-        leading=6.5,
+        'CellStyle', parent=styles['Normal'], fontSize=5.5, leading=6.5,
         textColor=colors.HexColor('#111827')
     )
-    
     header_style = ParagraphStyle(
-        'HeaderStyle',
-        parent=styles['Normal'],
-        fontSize=6.5,
-        leading=8,
-        textColor=colors.white,
-        fontName="Helvetica-Bold",
-        alignment=1
+        'HeaderStyle', parent=styles['Normal'], fontSize=6.5, leading=8,
+        textColor=colors.white, fontName="Helvetica-Bold", alignment=1
     )
 
     dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
@@ -270,39 +251,20 @@ def generar_pdf_todos_los_vendedores(df_rutas):
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle(
-        'TitleStyle',
-        parent=styles['Heading1'],
-        fontSize=10,
-        textColor=colors.HexColor('#1f2937'),
-        alignment=1,
-        spaceAfter=2
+        'TitleStyle', parent=styles['Heading1'], fontSize=10,
+        textColor=colors.HexColor('#1f2937'), alignment=1, spaceAfter=2
     )
-    
     section_style = ParagraphStyle(
-        'SectionStyle',
-        parent=styles['Heading3'],
-        fontSize=7.5,
-        textColor=colors.HexColor('#1f2937'),
-        fontName="Helvetica-Bold",
-        spaceAfter=1
+        'SectionStyle', parent=styles['Heading3'], fontSize=7.5,
+        textColor=colors.HexColor('#1f2937'), fontName="Helvetica-Bold", spaceAfter=1
     )
-    
     cell_style = ParagraphStyle(
-        'CellStyle',
-        parent=styles['Normal'],
-        fontSize=5.5,
-        leading=6.5,
+        'CellStyle', parent=styles['Normal'], fontSize=5.5, leading=6.5,
         textColor=colors.HexColor('#111827')
     )
-    
     header_style = ParagraphStyle(
-        'HeaderStyle',
-        parent=styles['Normal'],
-        fontSize=6.5,
-        leading=8,
-        textColor=colors.white,
-        fontName="Helvetica-Bold",
-        alignment=1
+        'HeaderStyle', parent=styles['Normal'], fontSize=6.5, leading=8,
+        textColor=colors.white, fontName="Helvetica-Bold", alignment=1
     )
 
     dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
@@ -377,6 +339,120 @@ def generar_pdf_todos_los_vendedores(df_rutas):
             
             story.append(t)
             story.append(Spacer(1, 2))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=20, leftMargin=20,
+        topMargin=20, bottomMargin=20
+    )
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'TitleStyle', parent=styles['Heading1'], fontSize=12,
+        textColor=colors.HexColor('#1f2937'), alignment=1, spaceAfter=4
+    )
+    subtitle_style = ParagraphStyle(
+        'SubtitleStyle', parent=styles['Heading2'], fontSize=9,
+        textColor=colors.HexColor('#4b5563'), spaceAfter=8
+    )
+    cell_style = ParagraphStyle(
+        'CellStyle', parent=styles['Normal'], fontSize=7, leading=9,
+        textColor=colors.HexColor('#111827')
+    )
+    header_style = ParagraphStyle(
+        'HeaderStyle', parent=styles['Normal'], fontSize=8, leading=10,
+        textColor=colors.white, fontName="Helvetica-Bold", alignment=1
+    )
+
+    s_num = "1" if "1" in semana_evaluar else "2"
+    col_visita = f"Visita_S{s_num}"
+    col_pedido = f"Pedido_S{s_num}"
+    col_motivo = f"Motivo_Pedido_S{s_num}"
+
+    story.append(Paragraph(f"<b>REPORTE DE NOVEDADES Y MOTIVOS DE GESTIÓN ({semana_evaluar.upper()})</b>", title_style))
+    story.append(Paragraph(f"Fecha de reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+    story.append(Spacer(1, 4))
+
+    vendedores_unicos = [str(v).strip() for v in df_rutas["Vendedor"].dropna().unique() if str(v).strip() != ""]
+
+    for idx_v, vendedor in enumerate(vendedores_unicos):
+        if idx_v > 0:
+            story.append(PageBreak())
+
+        df_v = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
+        
+        novedades_list = []
+        for _, row in df_v.iterrows():
+            v_val = bool(row.get(col_visita, False))
+            p_val = bool(row.get(col_pedido, False))
+            motivo = str(row.get(col_motivo, "")).strip()
+            
+            # Si fue visitado y hizo pedido -> SE IGNORA
+            if v_val and p_val:
+                continue
+                
+            if v_val and not p_val:
+                condicion = "Visitado / SIN Pedido"
+            elif not v_val and not p_val:
+                condicion = "NO Visitado / SIN Pedido"
+            elif not v_val and p_val:
+                condicion = "NO Visitado / CON Pedido"
+            else:
+                condicion = "Novedad"
+                
+            novedades_list.append({
+                "Cliente": row.get("Cliente", ""),
+                "Ubicación": row.get("Ubicacion", ""),
+                "Condición": condicion,
+                "Motivo / Observación": motivo if motivo else "Sin justificación dada"
+            })
+
+        story.append(Paragraph(f"<b>VENDEDOR: {vendedor.upper()}</b>", subtitle_style))
+
+        if not novedades_list:
+            story.append(Paragraph("<i>No hay novedades registradas (Todos los clientes completaron visita con pedido).</i>", cell_style))
+            story.append(Spacer(1, 10))
+            continue
+
+        headers = [
+            Paragraph("CLIENTE", header_style),
+            Paragraph("UBICACIÓN", header_style),
+            Paragraph("ESTATUS NOVEDAD", header_style),
+            Paragraph("MOTIVO / OBSERVACIÓN", header_style)
+        ]
+        
+        matriz_tabla = [headers]
+        for item in novedades_list:
+            matriz_tabla.append([
+                Paragraph(f"<b>{item['Cliente']}</b>", cell_style),
+                Paragraph(item["Ubicación"], cell_style),
+                Paragraph(f"<b>{item['Condición']}</b>", cell_style),
+                Paragraph(item["Motivo / Observación"], cell_style)
+            ])
+
+        t = Table(matriz_tabla, colWidths=[180, 150, 160, 260])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING', (0,0), (-1,-1), 4),
+            ('RIGHTPADDING', (0,0), (-1,-1), 4),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
+        ]))
+        
+        story.append(t)
+        story.append(Spacer(1, 10))
 
     doc.build(story)
     buffer.seek(0)
@@ -526,7 +602,7 @@ if st.session_state["df_clientes"].empty:
   else:
     st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
 
-def guardar_en_base_de_datos(df):
+def guardar_en_base_de_datos(df, vendedor_guardar=None, semana_guardar="Semana 1", dia_guardar="Lunes"):
   if supabase:
     try:
       df_to_save = df.copy().fillna("")
@@ -552,7 +628,36 @@ def guardar_en_base_de_datos(df):
 
       if registros_personal:
         supabase.table("personal_rutas").insert(registros_personal).execute()
-      st.success("¡Cambios guardados en la base de datos correctamente!")
+
+      # Guardar en Historial Diario si se especifica
+      if vendedor_guardar:
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        s_num = "1" if "1" in semana_guardar else "2"
+        col_v = f"Visita_S{s_num}"
+        col_p = f"Pedido_S{s_num}"
+        col_m = f"Motivo_Pedido_S{s_num}"
+
+        df_hist = df[df["Vendedor"].astype(str).str.strip() == vendedor_guardar.strip()]
+        registros_historial = []
+        for _, r_h in df_hist.iterrows():
+          registros_historial.append({
+              "fecha": fecha_hoy,
+              "vendedor": vendedor_guardar,
+              "semana": semana_guardar,
+              "dia_semana": dia_guardar,
+              "cliente": r_h.get("Cliente", ""),
+              "ubicacion": r_h.get("Ubicacion", ""),
+              "visitado": bool(r_h.get(col_v, False)),
+              "pedido": bool(r_h.get(col_p, False)),
+              "motivo": str(r_h.get(col_m, ""))
+          })
+        if registros_historial:
+          try:
+            supabase.table("historial_visitas_diarias").insert(registros_historial).execute()
+          except Exception as e_h:
+            print(f"Nota historial: {e_h}")
+
+      st.success("¡Cambios guardados en la base de datos e historial de auditoría correctamente!")
     except Exception as e:
       st.error(f"Error al guardar en Supabase: {e}")
 
@@ -598,8 +703,14 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
 
     return ", ".join(resultados_despacho) if resultados_despacho else "No asignado"
 
-# Pestañas de la aplicación
-tab_general, tab_ruta_vendedores, tab_ruta_despacho = st.tabs(["📊 Cuadro Maestro General", "🚚 Ruta de Vendedores", "📦 Ruta de Despacho"])
+# Pestañas de la aplicación (Incluyendo Novedades y Buscador de Historial)
+tab_general, tab_ruta_vendedores, tab_novedades, tab_historial, tab_ruta_despacho = st.tabs([
+    "📊 Cuadro Maestro General", 
+    "🚚 Ruta de Vendedores", 
+    "🚨 Reporte de Novedades",
+    "🔍 Buscador de Historial",
+    "📦 Ruta de Despacho"
+])
 
 with tab_general:
     st.header("Base de Datos General de Clientes y Rutas")
@@ -917,8 +1028,7 @@ with tab_ruta_vendedores:
                             st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = row_edit[col_pedido_estatus]
                             st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = row_edit[col_motivo_estatus]
                     
-                    guardar_en_base_de_datos(st.session_state["df_clientes"])
-                    st.success(f"¡Ruta de {vendedor} guardada con éxito!")
+                    guardar_en_base_de_datos(st.session_state["df_clientes"], vendedor_guardar=vendedor, semana_guardar=semana_seleccionada, dia_guardar=dia_seleccionado)
                     st.rerun()
     else:
         st.info("No hay vendedores con rutas asignadas.")
@@ -952,6 +1062,61 @@ with tab_ruta_vendedores:
             mime="application/pdf",
             use_container_width=True
         )
+
+with tab_novedades:
+    st.header("🚨 Reporte de Novedades y Excepciones de Gestión")
+    st.markdown("Filtra automáticamente los casos que requieren justificación (omitiendo visitas con pedido exitosas).")
+
+    col_nov1, col_nov2 = st.columns([2, 1])
+    with col_nov1:
+        semana_novedades = st.selectbox("Seleccionar Semana para el Reporte de Novedades", ["Semana 1", "Semana 2"])
+    
+    with col_nov2:
+        st.write("")
+        st.write("")
+        pdf_novedades = generar_pdf_novedades_excepciones(st.session_state["df_clientes"], semana_evaluar=semana_novedades)
+        st.download_button(
+            label="📥 Descargar Reporte de Novedades en PDF",
+            data=pdf_novedades,
+            file_name=f"Reporte_Novedades_{semana_novedades.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+with tab_historial:
+    st.header("🔍 Buscador de Historial de Auditoría")
+    st.markdown("Consulta rápida para verificar el estatus histórico de cualquier cliente en una fecha específica.")
+
+    col_h1, col_h2 = st.columns(2)
+    with col_h1:
+        cliente_buscar = st.text_input("Nombre del Cliente a buscar:", placeholder="Ej: Gama, La Muralla...")
+    with col_h2:
+        fecha_buscar = st.date_input("Filtrar por Fecha (Opcional):", value=None)
+
+    if st.button("🔎 Buscar en el Historial", type="primary"):
+        if supabase:
+            try:
+                query = supabase.table("historial_visitas_diarias").select("*")
+                if cliente_buscar:
+                    query = query.ilike("cliente", f"%{cliente_buscar}%")
+                if fecha_buscar:
+                    query = query.eq("fecha", str(fecha_buscar))
+                
+                res = query.execute()
+                if res.data:
+                    df_h = pd.DataFrame(res.data)
+                    df_h = df_h.rename(columns={
+                        "fecha": "Fecha", "vendedor": "Vendedor", "semana": "Semana", 
+                        "dia_semana": "Día", "cliente": "Cliente", "ubicacion": "Ubicación",
+                        "visitado": "¿Visitado?", "pedido": "¿Pedido?", "motivo": "Motivo / Observación"
+                    })
+                    st.dataframe(df_h[["Fecha", "Vendedor", "Semana", "Día", "Cliente", "Ubicación", "¿Visitado?", "¿Pedido?", "Motivo / Observación"]], use_container_width=True, hide_index=True)
+                else:
+                    st.info("No se encontraron registros en el historial para los criterios seleccionados.")
+            except Exception as e:
+                st.error(f"Error consultando el historial: {e}")
+        else:
+            st.error("Supabase no está configurado.")
 
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
