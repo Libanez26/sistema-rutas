@@ -137,7 +137,7 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# GENERACIÓN DE REPORTE EN PDF (Por Vendedor Específico - Ambas Semanas)
+# FUNCIONES DE GENERACIÓN DE PDF
 # ==========================================
 def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
     buffer = io.BytesIO()
@@ -196,7 +196,6 @@ def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
     story.append(Paragraph(f"<b>REPORTE DE RUTAS - {vendedor_seleccionado.upper()} {f'({nro_ruta})' if nro_ruta else ''}</b>", title_style))
     story.append(Spacer(1, 1))
 
-    # Iterar para Semana 1 y Semana 2 en la misma hoja del vendedor (sin número de base de datos)
     for semana_str in ["Semana 1", "Semana 2"]:
         story.append(Paragraph(semana_str.upper(), section_style))
         col_visita_key = f"Día de Visita {semana_str}"
@@ -216,7 +215,6 @@ def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
             for _, row_c in df_dia.iterrows():
                 cli_nombre = row_c.get("Cliente", "")
                 cli_ubicacion = row_c.get("Ubicacion", "")
-                # Eliminado el número (nro_cli) de la celda del PDF
                 texto_celda = f"<b>{cli_nombre}</b><br/><i>{cli_ubicacion}</i>"
                 lista_clientes_dia.append(Paragraph(texto_celda, cell_style))
             
@@ -240,7 +238,6 @@ def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
                     fila.append(Paragraph("", cell_style))
             matriz_tabla.append(fila)
 
-        # Ancho total landscape letter ≈ 772 pt / 5 columnas ≈ 154.4 pt c/u
         t = Table(matriz_tabla, colWidths=[154, 154, 154, 154, 154])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
@@ -256,6 +253,130 @@ def generar_pdf_vendedor_individual(df_rutas, vendedor_seleccionado):
         
         story.append(t)
         story.append(Spacer(1, 2))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generar_pdf_todos_los_vendedores(df_rutas):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=10, leftMargin=10,
+        topMargin=10, bottomMargin=10
+    )
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=10,
+        textColor=colors.HexColor('#1f2937'),
+        alignment=1,
+        spaceAfter=2
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionStyle',
+        parent=styles['Heading3'],
+        fontSize=7.5,
+        textColor=colors.HexColor('#1f2937'),
+        fontName="Helvetica-Bold",
+        spaceAfter=1
+    )
+    
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=5.5,
+        leading=6.5,
+        textColor=colors.HexColor('#111827')
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=6.5,
+        leading=8,
+        textColor=colors.white,
+        fontName="Helvetica-Bold",
+        alignment=1
+    )
+
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+    vendedores_unicos = [str(v).strip() for v in df_rutas["Vendedor"].dropna().unique() if str(v).strip() != ""]
+
+    for idx_v, vendedor in enumerate(vendedores_unicos):
+        if idx_v > 0:
+            story.append(PageBreak())
+
+        df_vend = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
+        nro_ruta = ""
+        if not df_vend.empty and "Nro de Ruta (Ventas)" in df_vend.columns:
+            nro_ruta = str(df_vend.iloc[0].get("Nro de Ruta (Ventas)", ""))
+
+        story.append(Paragraph(f"<b>REPORTE EJECUTIVO GENERAL - {vendedor.upper()} {f'({nro_ruta})' if nro_ruta else ''}</b>", title_style))
+        story.append(Spacer(1, 1))
+
+        for semana_str in ["Semana 1", "Semana 2"]:
+            story.append(Paragraph(semana_str.upper(), section_style))
+            col_visita_key = f"Día de Visita {semana_str}"
+            
+            headers = []
+            columnas_por_dia = {}
+            max_filas = 0
+
+            for dia in dias_semana:
+                headers.append(Paragraph(dia.upper(), header_style))
+                if col_visita_key in df_vend.columns:
+                    df_dia = df_vend[df_vend[col_visita_key].astype(str).str.contains(dia, case=False, na=False)]
+                else:
+                    df_dia = pd.DataFrame()
+                
+                lista_clientes_dia = []
+                for _, row_c in df_dia.iterrows():
+                    cli_nombre = row_c.get("Cliente", "")
+                    cli_ubicacion = row_c.get("Ubicacion", "")
+                    texto_celda = f"<b>{cli_nombre}</b><br/><i>{cli_ubicacion}</i>"
+                    lista_clientes_dia.append(Paragraph(texto_celda, cell_style))
+                
+                columnas_por_dia[dia] = lista_clientes_dia
+                if len(lista_clientes_dia) > max_filas:
+                    max_filas = len(lista_clientes_dia)
+
+            if max_filas == 0:
+                story.append(Paragraph(f"<i>No hay clientes asignados para {semana_str}.</i>", cell_style))
+                story.append(Spacer(1, 2))
+                continue
+
+            matriz_tabla = [headers]
+            for i in range(max_filas):
+                fila = []
+                for dia in dias_semana:
+                    cli_list = columnas_por_dia[dia]
+                    if i < len(cli_list):
+                        fila.append(cli_list[i])
+                    else:
+                        fila.append(Paragraph("", cell_style))
+                matriz_tabla.append(fila)
+
+            t = Table(matriz_tabla, colWidths=[154, 154, 154, 154, 154])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
+                ('TOPPADDING', (0,0), (-1,-1), 1),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ('LEFTPADDING', (0,0), (-1,-1), 3),
+                ('RIGHTPADDING', (0,0), (-1,-1), 3),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
+            ]))
+            
+            story.append(t)
+            story.append(Spacer(1, 2))
 
     doc.build(story)
     buffer.seek(0)
@@ -803,15 +924,13 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Reporte Individual en PDF por Vendedor")
+    st.subheader("📥 Descarga de Reportes en PDF")
     
-    col_sel_vend, col_btn_vend = st.columns([2, 1])
-    with col_sel_vend:
-        vendedor_pdf_elegido = st.selectbox("Seleccionar Vendedor para Descarga PDF", vendedores_disponibles, key="sel_vend_pdf_ind")
+    col_dl_ind, col_dl_gen = st.columns(2)
     
-    with col_btn_vend:
-        st.write("")
-        st.write("")
+    with col_dl_ind:
+        st.markdown("#### 👤 Reporte Individual por Vendedor")
+        vendedor_pdf_elegido = st.selectbox("Seleccionar Vendedor", vendedores_disponibles, key="sel_vend_pdf_ind")
         if vendedor_pdf_elegido:
             pdf_bytes_vendedor = generar_pdf_vendedor_individual(st.session_state["df_clientes"], vendedor_pdf_elegido)
             st.download_button(
@@ -821,6 +940,18 @@ with tab_ruta_vendedores:
                 mime="application/pdf",
                 use_container_width=True
             )
+
+    with col_dl_gen:
+        st.markdown("#### 📋 Reporte Ejecutivo General (Todos los Vendedores)")
+        st.caption("Ideal para presentar a la jefatura con todas las rutas completas.")
+        pdf_bytes_general = generar_pdf_todos_los_vendedores(st.session_state["df_clientes"])
+        st.download_button(
+            label="📥 Descargar Reporte Ejecutivo Completo (.pdf)",
+            data=pdf_bytes_general,
+            file_name="Reporte_Ejecutivo_General_Rutas.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
