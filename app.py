@@ -236,7 +236,7 @@ def generar_pdf_rutas_estilizado(df_rutas, semana_str="Semana 1"):
                 max_filas = len(lista_clientes_dia)
         
         if max_filas == 0:
-            story.append(Paragraph(<i>No hay clientes asignados para {semana_str} en esta ruta.</i>, cell_style))
+            story.append(Paragraph(f"<i>No hay clientes asignados para {semana_str} en esta ruta.</i>", cell_style))
             story.append(Spacer(1, 15))
             continue
 
