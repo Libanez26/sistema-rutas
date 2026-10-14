@@ -71,20 +71,21 @@ def inicializar_estado_global():
 inicializar_estado_global()
 
 # ==========================================
-# CONEXIÓN A SUPABASE
+# CONEXIÓN A SUPABASE (Con corrección de URL)
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
     if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
         return None
     try:
-        url = st.secrets["SUPABASE_URL"].strip()
+        url = str(st.secrets["SUPABASE_URL"]).strip().strip('"').strip("'")
         for sufijo in ["/rest/v1/", "/rest/v1", "/"]:
-            if url.endswith(sufijo):
+            while url.endswith(sufijo):
                 url = url[: -len(sufijo)].strip()
-        key = st.secrets["SUPABASE_KEY"].strip()
+        key = str(st.secrets["SUPABASE_KEY"]).strip().strip('"').strip("'")
         return create_client(url, key)
-    except Exception:
+    except Exception as e:
+        print(f"Error inicializando Supabase: {e}")
         return None
 
 supabase = init_supabase()
@@ -140,70 +141,137 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# GENERACIÓN DE REPORTES EN HTML ESTILIZADO
+# GENERACIÓN DE REPORTES EN PDF (Estructura por Bloques y Días)
 # ==========================================
-def generar_html_rutas_vendedor(df_rutas, vendedor_seleccionado=None):
-    df_f = df_rutas.copy()
-    if vendedor_seleccionado:
-        df_f = df_f[df_f["Vendedor"].astype(str).str.strip() == vendedor_seleccionado.strip()]
+def generar_pdf_rutas_estilizado(df_rutas, semana_str="Semana 1"):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=20, leftMargin=20,
+        topMargin=20, bottomMargin=20
+    )
+    story = []
+    styles = getSampleStyleSheet()
     
-    # Excluir columnas de control binario / Sí/No / Visita / Pedido / Motivo
-    cols_excluir = [c for c in df_f.columns if c in ["Semana 1", "Semana 2"] or c.startswith("Visita_") or c.startswith("Pedido_") or c.startswith("Motivo_") or c.lower() in ["si/no", "s/n"]]
-    df_f = df_f.drop(columns=[c for c in cols_excluir if c in df_f.columns]).fillna("")
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1f2937'),
+        alignment=1, # Centrado
+        spaceAfter=15
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'SubtitleStyle',
+        parent=styles['Heading2'],
+        fontSize=12,
+        textColor=colors.HexColor('#4b5563'),
+        spaceAfter=10
+    )
+    
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#111827')
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        textColor=colors.white,
+        fontName="Helvetica-Bold",
+        alignment=1
+    )
 
-    titulo = f"Reporte Logístico de Rutas - {vendedor_seleccionado}" if vendedor_seleccionado else "Reporte Logístico de Rutas - Todos los Vendedores"
+    story.append(Paragraph(f"REPORTE LOGÍSTICO DE RUTAS - {semana_str.upper()}", title_style))
+    story.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+    story.append(Spacer(1, 10))
 
-    html_tabla = df_f.to_html(index=False, classes="table-logistic", border=0)
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+    col_visita_key = f"Día de Visita {semana_str}"
+    
+    vendedores_unicos = [str(v).strip() for v in df_rutas["Vendedor"].dropna().unique() if str(v).strip() != ""]
 
-    html_code = f"""
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background-color: #0e1117;
-                color: #ffffff;
-                margin: 20px;
-            }}
-            h2 {{
-                color: #f3f4f6;
-                border-bottom: 2px solid #374151;
-                padding-bottom: 10px;
-            }}
-            .table-logistic {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-                font-size: 12px;
-                background-color: #1f2937;
-            }}
-            .table-logistic th {{
-                background-color: #374151;
-                color: #ffffff;
-                padding: 10px;
-                text-align: left;
-                border: 1px solid #4b5563;
-            }}
-            .table-logistic td {{
-                padding: 8px 10px;
-                border: 1px solid #374151;
-                color: #d1d5db;
-            }}
-            .table-logistic tr:nth-child(even) {{
-                background-color: #111827;
-            }}
-        </style>
-    </head>
-    <body>
-        <h2>{titulo}</h2>
-        <p>Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-        {html_tabla}
-    </body>
-    </html>
-    """
-    return html_code
+    for vendedor in vendedores_unicos:
+        df_vend = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
+        
+        # Obtener ruta de ventas asociada
+        nro_ruta = ""
+        if not df_vend.empty and "Nro de Ruta (Ventas)" in df_vend.columns:
+            nro_ruta = str(df_vend.iloc[0].get("Nro de Ruta (Ventas)", ""))
+
+        story.append(Paragraph(f"<b>VENDEDOR: {vendedor} {f'({nro_ruta})' if nro_ruta else ''}</b>", subtitle_style))
+        
+        # Construir columnas por cada día de la semana
+        headers = []
+        data_rows = []
+        
+        max_filas = 0
+        columnas_por_dia = {}
+        
+        for dia in dias_semana:
+            headers.append(Paragraph(dia.upper(), header_style))
+            if col_visita_key in df_vend.columns:
+                # Filtrar clientes que corresponden a este día
+                df_dia = df_vend[df_vend[col_visita_key].astype(str).str.contains(dia, case=False, na=False)]
+            else:
+                df_dia = pd.DataFrame()
+            
+            lista_clientes_dia = []
+            for idx_c, row_c in df_dia.iterrows():
+                nro_cli = row_c.get("Nro", "")
+                cli_nombre = row_c.get("Cliente", "")
+                cli_ubicacion = row_c.get("Ubicacion", "")
+                texto_celda = f"<b>{nro_cli}.</b> {cli_nombre}<br/><i>{cli_ubicacion}</i>"
+                lista_clientes_dia.append(Paragraph(texto_celda, cell_style))
+            
+            columnas_por_dia[dia] = lista_clientes_dia
+            if len(lista_clientes_dia) > max_filas:
+                max_filas = len(lista_clientes_dia)
+        
+        if max_filas == 0:
+            story.append(Paragraph(<i>No hay clientes asignados para {semana_str} en esta ruta.</i>, cell_style))
+            story.append(Spacer(1, 15))
+            continue
+
+        # Rellenar con filas vacías para que todas las columnas tengan la misma altura
+        matriz_tabla = [headers]
+        for i in range(max_filas):
+            fila = []
+            for dia in dias_semana:
+                cli_list = columnas_por_dia[dia]
+                if i < len(cli_list):
+                    fila.append(cli_list[i])
+                else:
+                    fila.append(Paragraph("", cell_style))
+            matriz_tabla.append(fila)
+
+        # Ancho de página landscape letter es aprox 792 pt. Margen der/izq 20*2 = 40. Ancho utilizable = 752 / 5 días ≈ 150 pt por columna.
+        t = Table(matriz_tabla, colWidths=[150, 150, 150, 150, 152])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
+        ]))
+        
+        story.append(t)
+        story.append(Spacer(1, 20))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # ==========================================
 # GESTIÓN DE AUTENTICACIÓN
@@ -223,7 +291,7 @@ if st.session_state["usuario"] is None:
         if st.button("Ingresar", type="primary"):
             if supabase:
                 try:
-                    res = supabase.auth.sign_in_with_password({"email": correo_login, "password": password_login})
+                    res = supabase.auth.sign_in_with_password({"email": correo_login.strip(), "password": password_login})
                     st.session_state["usuario"] = res.user
                     st.session_state["dispositivo_confianza"] = recordar_dispositivo
                     st.success("¡Sesión iniciada con éxito!")
@@ -241,7 +309,7 @@ if st.session_state["usuario"] is None:
         if st.button("Registrarse"):
             if supabase:
                 try:
-                    supabase.auth.sign_up({"email": correo_reg, "password": password_reg})
+                    supabase.auth.sign_up({"email": correo_reg.strip(), "password": password_reg})
                     st.success("¡Registro exitoso! Ya puedes iniciar sesión.")
                 except Exception as e:
                     st.error(f"Error al registrarse: {e}")
@@ -749,30 +817,22 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Rutas de Vendedores (Formato Logístico en HTML)")
+    st.subheader("📥 Descarga de Reportes Profesionales en PDF (Formato por Bloques y Días)")
     
-    col_dl_1, col_dl_2 = st.columns(2)
+    col_dl_pdf1, col_dl_pdf2 = st.columns(2)
     
-    with col_dl_1:
-        # Descarga Ruta Todos los Vendedores en HTML estilizado
-        html_todos = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=None)
+    with col_dl_pdf1:
+        semana_pdf_s1 = st.selectbox("Seleccionar Semana para Reporte PDF", ["Semana 1", "Semana 2"], key="sel_sem_pdf")
+    
+    with col_dl_pdf2:
+        st.write("")
+        st.write("")
+        pdf_bytes_generado = generar_pdf_rutas_estilizado(st.session_state["df_clientes"], semana_str=semana_pdf_s1)
         st.download_button(
-            label="📥 Descargar Ruta Todos los Vendedores (.html)",
-            data=html_todos,
-            file_name="Ruta_Todos_Vendedores_Formato_Logistico.html",
-            mime="text/html",
-            use_container_width=True
-        )
-
-    with col_dl_2:
-        # Descarga Ruta por Vendedor Específico en HTML estilizado
-        vendedor_a_descargar = st.selectbox("Seleccionar Vendedor para Descarga", vendedores_disponibles, key="select_vendedor_dl")
-        html_vendedor = generar_html_rutas_vendedor(st.session_state["df_clientes"], vendedor_seleccionado=vendedor_a_descargar)
-        st.download_button(
-            label=f"📥 Descargar Ruta de {vendedor_a_descargar} (.html)",
-            data=html_vendedor,
-            file_name=f"Ruta_{vendedor_a_descargar.replace(' ', '_')}_Formato_Logistico.html",
-            mime="text/html",
+            label=f"📥 Descargar Reporte en PDF ({semana_pdf_s1})",
+            data=pdf_bytes_generado,
+            file_name=f"Reporte_Rutas_{semana_pdf_s1.replace(' ', '_')}.pdf",
+            mime="application/pdf",
             use_container_width=True
         )
 
