@@ -137,15 +137,15 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# GENERACIÓN DE REPORTES EN PDF (Ambas semanas en una sola hoja por vendedor)
+# GENERACIÓN DE REPORTES EN PDF (Ultra compacto para 1 sola hoja)
 # ==========================================
 def generar_pdf_rutas_ambas_semanas(df_rutas):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(letter),
-        rightMargin=15, leftMargin=15,
-        topMargin=15, bottomMargin=15
+        rightMargin=10, leftMargin=10,
+        topMargin=10, bottomMargin=10
     )
     story = []
     styles = getSampleStyleSheet()
@@ -153,42 +153,34 @@ def generar_pdf_rutas_ambas_semanas(df_rutas):
     title_style = ParagraphStyle(
         'TitleStyle',
         parent=styles['Heading1'],
-        fontSize=12,
+        fontSize=10,
         textColor=colors.HexColor('#1f2937'),
         alignment=1,
-        spaceAfter=4
-    )
-    
-    subtitle_style = ParagraphStyle(
-        'SubtitleStyle',
-        parent=styles['Heading2'],
-        fontSize=9,
-        textColor=colors.HexColor('#4b5563'),
-        spaceAfter=3
+        spaceAfter=2
     )
     
     section_style = ParagraphStyle(
         'SectionStyle',
         parent=styles['Heading3'],
-        fontSize=8.5,
+        fontSize=7.5,
         textColor=colors.HexColor('#1f2937'),
         fontName="Helvetica-Bold",
-        spaceAfter=2
+        spaceAfter=1
     )
     
     cell_style = ParagraphStyle(
         'CellStyle',
         parent=styles['Normal'],
-        fontSize=6.5,
-        leading=8,
+        fontSize=5.5,
+        leading=6.5,
         textColor=colors.HexColor('#111827')
     )
     
     header_style = ParagraphStyle(
         'HeaderStyle',
         parent=styles['Normal'],
-        fontSize=7.5,
-        leading=9,
+        fontSize=6.5,
+        leading=8,
         textColor=colors.white,
         fontName="Helvetica-Bold",
         alignment=1
@@ -199,7 +191,7 @@ def generar_pdf_rutas_ambas_semanas(df_rutas):
 
     for idx_v, vendedor in enumerate(vendedores_unicos):
         if idx_v > 0:
-            story.append(PageBreak())  # Cada vendedor arranca estrictamente en una hoja nueva
+            story.append(PageBreak())  # Cada vendedor arranca en una hoja nueva
 
         df_vend = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
         nro_ruta = ""
@@ -207,9 +199,9 @@ def generar_pdf_rutas_ambas_semanas(df_rutas):
             nro_ruta = str(df_vend.iloc[0].get("Nro de Ruta (Ventas)", ""))
 
         story.append(Paragraph(f"<b>REPORTE DE RUTAS - {vendedor.upper()} {f'({nro_ruta})' if nro_ruta else ''}</b>", title_style))
-        story.append(Spacer(1, 2))
+        story.append(Spacer(1, 1))
 
-        # Iterar para Semana 1 y Semana 2 de manera compacta en la misma página
+        # Iterar para Semana 1 y Semana 2 de manera ultracompacta
         for semana_str in ["Semana 1", "Semana 2"]:
             story.append(Paragraph(semana_str.upper(), section_style))
             col_visita_key = f"Día de Visita {semana_str}"
@@ -239,7 +231,7 @@ def generar_pdf_rutas_ambas_semanas(df_rutas):
 
             if max_filas == 0:
                 story.append(Paragraph(f"<i>No hay clientes asignados para {semana_str}.</i>", cell_style))
-                story.append(Spacer(1, 4))
+                story.append(Spacer(1, 2))
                 continue
 
             matriz_tabla = [headers]
@@ -253,22 +245,22 @@ def generar_pdf_rutas_ambas_semanas(df_rutas):
                         fila.append(Paragraph("", cell_style))
                 matriz_tabla.append(fila)
 
-            # Ancho utilizable landscape letter ≈ 760 pt / 5 columnas ≈ 152 pt c/u
-            t = Table(matriz_tabla, colWidths=[152, 152, 152, 152, 152])
+            # Ancho total landscape letter ≈ 772 pt / 5 columnas ≈ 154.4 pt c/u
+            t = Table(matriz_tabla, colWidths=[154, 154, 154, 154, 154])
             t.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
-                ('TOPPADDING', (0,0), (-1,-1), 2),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-                ('LEFTPADDING', (0,0), (-1,-1), 4),
-                ('RIGHTPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 1),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ('LEFTPADDING', (0,0), (-1,-1), 3),
+                ('RIGHTPADDING', (0,0), (-1,-1), 3),
                 ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
             ]))
             
             story.append(t)
-            story.append(Spacer(1, 4))
+            story.append(Spacer(1, 2))
 
     doc.build(story)
     buffer.seek(0)
@@ -816,11 +808,11 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Reporte Consolidado en PDF (Ambas Semanas Juntas por Vendedor)")
+    st.subheader("📥 Descarga de Reporte Consolidado en PDF (Ambas Semanas Compactas por Vendedor)")
     
     pdf_bytes_generado = generar_pdf_rutas_ambas_semanas(st.session_state["df_clientes"])
     st.download_button(
-        label="📥 Descargar Reporte PDF (Semana 1 y 2 en una sola hoja por Vendedor)",
+        label="📥 Descargar Reporte PDF (Semana 1 y 2 Compactas en una sola hoja por Vendedor)",
         data=pdf_bytes_generado,
         file_name="Reporte_Rutas_Ambas_Semanas_Compacto.pdf",
         mime="application/pdf",
