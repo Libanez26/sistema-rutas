@@ -67,6 +67,9 @@ def inicializar_estado_global():
         st.session_state["df_clientes"] = pd.DataFrame()
     if "historial_semana_previa" not in st.session_state:
         st.session_state["historial_semana_previa"] = {"semana": "Semana 1", "fecha": datetime.now().date()}
+        for col in columnas_clientes:
+            if "Motivo_" in col:
+                df_temp[col] = df_temp[col].fillna("").astype(str)
 
 inicializar_estado_global()
 
