@@ -7,7 +7,7 @@ import google.generativeai as genai
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -91,10 +91,6 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 def normalizar_dia(dia):
-    """
-    Corrige errores ortográficos, mayúsculas, tildes y variaciones 
-    en los días de la semana (ej: miercoles -> Miércoles).
-    """
     if pd.isna(dia) or not dia:
         return ""
     
@@ -141,9 +137,9 @@ def normalizar_tiempo_despacho(val):
     return str(val).strip().capitalize()
 
 # ==========================================
-# GENERACIÓN DE REPORTES EN PDF (Estructura por Bloques y Días)
+# GENERACIÓN DE REPORTES EN PDF (Cada vendedor en una sola hoja con ambas semanas)
 # ==========================================
-def generar_pdf_rutas_estilizado(df_rutas, semana_str="Semana 1"):
+def generar_pdf_rutas_ambas_semanas(df_rutas):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -157,117 +153,121 @@ def generar_pdf_rutas_estilizado(df_rutas, semana_str="Semana 1"):
     title_style = ParagraphStyle(
         'TitleStyle',
         parent=styles['Heading1'],
-        fontSize=16,
+        fontSize=14,
         textColor=colors.HexColor('#1f2937'),
-        alignment=1, # Centrado
-        spaceAfter=15
+        alignment=1,
+        spaceAfter=10
     )
     
     subtitle_style = ParagraphStyle(
         'SubtitleStyle',
         parent=styles['Heading2'],
-        fontSize=12,
-        textColor=colors.HexColor('#4b5563'),
-        spaceAfter=10
+        fontSize=11,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=6
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionStyle',
+        parent=styles['Heading3'],
+        fontSize=10,
+        textColor=colors.HexColor('#374151'),
+        spaceAfter=4
     )
     
     cell_style = ParagraphStyle(
         'CellStyle',
         parent=styles['Normal'],
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9,
         textColor=colors.HexColor('#111827')
     )
     
     header_style = ParagraphStyle(
         'HeaderStyle',
         parent=styles['Normal'],
-        fontSize=9,
-        leading=11,
+        fontSize=8.5,
+        leading=10,
         textColor=colors.white,
         fontName="Helvetica-Bold",
         alignment=1
     )
 
-    story.append(Paragraph(f"REPORTE LOGÍSTICO DE RUTAS - {semana_str.upper()}", title_style))
-    story.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
-    story.append(Spacer(1, 10))
-
     dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-    col_visita_key = f"Día de Visita {semana_str}"
-    
     vendedores_unicos = [str(v).strip() for v in df_rutas["Vendedor"].dropna().unique() if str(v).strip() != ""]
 
-    for vendedor in vendedores_unicos:
+    for idx_v, vendedor in enumerate(vendedores_unicos):
+        if idx_v > 0:
+            story.append(PageBreak())  # Cada vendedor arranca estrictamente en una hoja nueva
+
         df_vend = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
-        
-        # Obtener ruta de ventas asociada
         nro_ruta = ""
         if not df_vend.empty and "Nro de Ruta (Ventas)" in df_vend.columns:
             nro_ruta = str(df_vend.iloc[0].get("Nro de Ruta (Ventas)", ""))
 
-        story.append(Paragraph(f"<b>VENDEDOR: {vendedor} {f'({nro_ruta})' if nro_ruta else ''}</b>", subtitle_style))
-        
-        # Construir columnas por cada día de la semana
-        headers = []
-        data_rows = []
-        
-        max_filas = 0
-        columnas_por_dia = {}
-        
-        for dia in dias_semana:
-            headers.append(Paragraph(dia.upper(), header_style))
-            if col_visita_key in df_vend.columns:
-                # Filtrar clientes que corresponden a este día
-                df_dia = df_vend[df_vend[col_visita_key].astype(str).str.contains(dia, case=False, na=False)]
-            else:
-                df_dia = pd.DataFrame()
-            
-            lista_clientes_dia = []
-            for idx_c, row_c in df_dia.iterrows():
-                nro_cli = row_c.get("Nro", "")
-                cli_nombre = row_c.get("Cliente", "")
-                cli_ubicacion = row_c.get("Ubicacion", "")
-                texto_celda = f"<b>{nro_cli}.</b> {cli_nombre}<br/><i>{cli_ubicacion}</i>"
-                lista_clientes_dia.append(Paragraph(texto_celda, cell_style))
-            
-            columnas_por_dia[dia] = lista_clientes_dia
-            if len(lista_clientes_dia) > max_filas:
-                max_filas = len(lista_clientes_dia)
-        
-        if max_filas == 0:
-            story.append(Paragraph(f"<i>No hay clientes asignados para {semana_str} en esta ruta.</i>", cell_style))
-            story.append(Spacer(1, 15))
-            continue
+        story.append(Paragraph(f"<b>REPORTE LOGÍSTICO DE RUTAS - {vendedor.upper()} {f'({nro_ruta})' if nro_ruta else ''}</b>", title_style))
+        story.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+        story.append(Spacer(1, 4))
 
-        # Rellenar con filas vacías para que todas las columnas tengan la misma altura
-        matriz_tabla = [headers]
-        for i in range(max_filas):
-            fila = []
+        # Iterar para Semana 1 y Semana 2 en la misma hoja del vendedor
+        for semana_str in ["Semana 1", "Semana 2"]:
+            story.append(Paragraph(f"<b>{semana_str.upper()}</b>", section_style))
+            col_visita_key = f"Día de Visita {semana_str}"
+            
+            headers = []
+            columnas_por_dia = {}
+            max_filas = 0
+
             for dia in dias_semana:
-                cli_list = columnas_por_dia[dia]
-                if i < len(cli_list):
-                    fila.append(cli_list[i])
+                headers.append(Paragraph(dia.upper(), header_style))
+                if col_visita_key in df_vend.columns:
+                    df_dia = df_vend[df_vend[col_visita_key].astype(str).str.contains(dia, case=False, na=False)]
                 else:
-                    fila.append(Paragraph("", cell_style))
-            matriz_tabla.append(fila)
+                    df_dia = pd.DataFrame()
+                
+                lista_clientes_dia = []
+                for _, row_c in df_dia.iterrows():
+                    nro_cli = row_c.get("Nro", "")
+                    cli_nombre = row_c.get("Cliente", "")
+                    cli_ubicacion = row_c.get("Ubicacion", "")
+                    texto_celda = f"<b>{nro_cli}.</b> {cli_nombre}<br/><i>{cli_ubicacion}</i>"
+                    lista_clientes_dia.append(Paragraph(texto_celda, cell_style))
+                
+                columnas_por_dia[dia] = lista_clientes_dia
+                if len(lista_clientes_dia) > max_filas:
+                    max_filas = len(lista_clientes_dia)
 
-        # Ancho de página landscape letter es aprox 792 pt. Margen der/izq 20*2 = 40. Ancho utilizable = 752 / 5 días ≈ 150 pt por columna.
-        t = Table(matriz_tabla, colWidths=[150, 150, 150, 150, 152])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('LEFTPADDING', (0,0), (-1,-1), 6),
-            ('RIGHTPADDING', (0,0), (-1,-1), 6),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
-        ]))
-        
-        story.append(t)
-        story.append(Spacer(1, 20))
+            if max_filas == 0:
+                story.append(Paragraph(f"<i>No hay clientes asignados para {semana_str}.</i>", cell_style))
+                story.append(Spacer(1, 8))
+                continue
+
+            matriz_tabla = [headers]
+            for i in range(max_filas):
+                fila = []
+                for dia in dias_semana:
+                    cli_list = columnas_por_dia[dia]
+                    if i < len(cli_list):
+                        fila.append(cli_list[i])
+                    else:
+                        fila.append(Paragraph("", cell_style))
+                matriz_tabla.append(fila)
+
+            t = Table(matriz_tabla, colWidths=[150, 150, 150, 150, 152])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('LEFTPADDING', (0,0), (-1,-1), 5),
+                ('RIGHTPADDING', (0,0), (-1,-1), 5),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
+            ]))
+            
+            story.append(t)
+            story.append(Spacer(1, 10))
 
     doc.build(story)
     buffer.seek(0)
@@ -731,11 +731,9 @@ with tab_ruta_vendedores:
     with col_f2:
         dia_seleccionado = st.selectbox("Seleccionar Día de Visita", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"])
 
-    # Obtener los vendedores ordenados según la tabla de configuración de personal
     if not st.session_state["df_vendedores"].empty and "Vendedor" in st.session_state["df_vendedores"].columns:
         orden_config = [str(v).strip() for v in st.session_state["df_vendedores"]["Vendedor"].dropna() if str(v).strip() != ""]
         vendedores_en_datos = list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""})
-        
         vendedores_disponibles = [v for v in orden_config if v in vendedores_en_datos] + [v for v in vendedores_en_datos if v not in orden_config]
     else:
         vendedores_disponibles = sorted(list(set(df_seguimiento["Vendedor"].dropna().astype(str)) - {""}))
@@ -817,24 +815,16 @@ with tab_ruta_vendedores:
         st.info("No hay vendedores con rutas asignadas.")
 
     st.markdown("---")
-    st.subheader("📥 Descarga de Reportes Profesionales en PDF (Formato por Bloques y Días)")
+    st.subheader("📥 Descarga de Reporte Consolidado en PDF (Ambas Semanas y Cada Vendedor en su Hoja)")
     
-    col_dl_pdf1, col_dl_pdf2 = st.columns(2)
-    
-    with col_dl_pdf1:
-        semana_pdf_s1 = st.selectbox("Seleccionar Semana para Reporte PDF", ["Semana 1", "Semana 2"], key="sel_sem_pdf")
-    
-    with col_dl_pdf2:
-        st.write("")
-        st.write("")
-        pdf_bytes_generado = generar_pdf_rutas_estilizado(st.session_state["df_clientes"], semana_str=semana_pdf_s1)
-        st.download_button(
-            label=f"📥 Descargar Reporte en PDF ({semana_pdf_s1})",
-            data=pdf_bytes_generado,
-            file_name=f"Reporte_Rutas_{semana_pdf_s1.replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+    pdf_bytes_generado = generar_pdf_rutas_ambas_semanas(st.session_state["df_clientes"])
+    st.download_button(
+        label="📥 Descargar Reporte General en PDF (Semana 1 y Semana 2 por Vendedor)",
+        data=pdf_bytes_generado,
+        file_name="Reporte_General_Rutas_Ambas_Semanas.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
 
 with tab_ruta_despacho:
     st.header("📦 Ruta de Despacho (Logística de Entrega)")
