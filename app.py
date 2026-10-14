@@ -67,9 +67,6 @@ def inicializar_estado_global():
         st.session_state["df_clientes"] = pd.DataFrame()
     if "historial_semana_previa" not in st.session_state:
         st.session_state["historial_semana_previa"] = {"semana": "Semana 1", "fecha": datetime.now().date()}
-        for col in columnas_clientes:
-            if "Motivo_" in col:
-                df_temp[col] = df_temp[col].fillna("").astype(str)
 
 inicializar_estado_global()
 
@@ -449,7 +446,7 @@ def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
                         Paragraph(f"<b>{item['Cliente']}</b>", cell_style),
                         Paragraph(item["Ubicación"], cell_style),
                         Paragraph(f"<b>{item['Condición']}</b>", cell_style),
-                        Paragraph(item["Motivo / Observación"], cell_style)
+                        Paragraph(item["Motivo / OBSERVACIÓN"], cell_style) if "Motivo / OBSERVACIÓN" in item else Paragraph(item["Motivo / Observación"], cell_style)
                     ])
 
                 t = Table(matriz_tabla, colWidths=[180, 150, 160, 260])
@@ -612,6 +609,8 @@ if st.session_state["df_clientes"].empty:
         for col in columnas_clientes:
           if col not in df_temp.columns:
             df_temp[col] = False if ("Visita_" in col or "Pedido_" in col) else ""
+          elif "Motivo_" in col:
+            df_temp[col] = df_temp[col].fillna("").astype(str)
         st.session_state["df_clientes"] = df_temp[columnas_clientes]
       else:
         st.session_state["df_clientes"] = pd.DataFrame(columns=columnas_clientes)
@@ -800,6 +799,8 @@ with tab_general:
             for c in columnas_clientes:
                 if c not in nuevo_df.columns:
                     nuevo_df[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
+                elif "Motivo_" in c:
+                    nuevo_df[c] = nuevo_df[c].fillna("").astype(str)
 
             st.session_state["df_clientes"] = nuevo_df[columnas_clientes]
             st.success("¡Archivo Excel procesado con éxito y normalizado!")
@@ -817,6 +818,8 @@ with tab_general:
             for col in columnas_clientes:
               if col not in df_ia.columns:
                 df_ia[col] = False if ("Visita_" in col or "Pedido_" in col) else ""
+              elif "Motivo_" in col:
+                df_ia[col] = df_ia[col].fillna("").astype(str)
             st.session_state["df_clientes"] = df_ia[columnas_clientes]
             st.success("¡Datos del PDF extraídos e integrados con éxito!")
         except Exception as e:
@@ -890,6 +893,8 @@ with tab_general:
         for col_c in columnas_clientes:
             if col_c not in df_actualizado.columns:
                 df_actualizado[col_c] = False if ("Visita_" in col_c or "Pedido_" in col_c) else ""
+            elif "Motivo_" in col_c:
+                df_actualizado[col_c] = df_actualizado[col_c].fillna("").astype(str)
 
         if texto_busqueda:
             for idx, row in edited_df_visible.iterrows():
@@ -1004,6 +1009,8 @@ with tab_ruta_vendedores:
                 for c in cols_view:
                     if c not in df_v_filtrado.columns:
                         df_v_filtrado[c] = False if ("Visita_" in c or "Pedido_" in c) else ""
+                    elif "Motivo_" in c:
+                        df_v_filtrado[c] = df_v_filtrado[c].fillna("").astype(str)
                 
                 for c in [col_visita_estatus, col_pedido_estatus]:
                     if c in df_v_filtrado.columns:
@@ -1032,23 +1039,28 @@ with tab_ruta_vendedores:
                 )
                 
                 if st.button(f"💾 Guardar {vendedor}", key=f"btn_guardar_{idx}_{semana_seleccionada}_{dia_seleccionado}", use_container_width=True):
+                    # Asegurarnos de que la columna global sea de tipo texto plano
+                    if col_motivo_estatus not in st.session_state["df_clientes"].columns:
+                        st.session_state["df_clientes"][col_motivo_estatus] = ""
+                    st.session_state["df_clientes"][col_motivo_estatus] = st.session_state["df_clientes"][col_motivo_estatus].fillna("").astype(str)
+
                     for r_idx, row_edit in df_editado_col.iterrows():
                         nro_val = row_edit.get("Nro")
                         match_global = st.session_state["df_clientes"][st.session_state["df_clientes"]["Nro"] == nro_val]
                         if not match_global.empty:
                             g_idx = match_global.index[0]
-                            for col_chk in [col_visita_estatus, col_pedido_estatus, col_motivo_estatus]:
+                            for col_chk in [col_visita_estatus, col_pedido_estatus]:
                                 if col_chk not in st.session_state["df_clientes"].columns:
-                                    st.session_state["df_clientes"][col_chk] = False if ("Visita_" in col_chk or "Pedido_" in col_chk) else ""
+                                    st.session_state["df_clientes"][col_chk] = False
                             
                             val_visita = bool(row_edit.get(col_visita_estatus, False))
                             val_pedido = bool(row_edit.get(col_pedido_estatus, False))
                             raw_motivo = row_edit.get(col_motivo_estatus, "")
                             val_motivo = "" if pd.isna(raw_motivo) or raw_motivo is False or str(raw_motivo).lower() in ["false", "none", "nan"] else str(raw_motivo)
 
-                            st.session_state["df_clientes"].loc[g_idx, col_visita_estatus] = val_visita
-                            st.session_state["df_clientes"].loc[g_idx, col_pedido_estatus] = val_pedido
-                            st.session_state["df_clientes"].loc[g_idx, col_motivo_estatus] = val_motivo
+                            st.session_state["df_clientes"].at[g_idx, col_visita_estatus] = val_visita
+                            st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = val_pedido
+                            st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = val_motivo
                     
                     guardar_en_base_de_datos(st.session_state["df_clientes"], vendedor_guardar=vendedor, semana_guardar=semana_seleccionada, dia_guardar=dia_seleccionado)
                     st.rerun()
