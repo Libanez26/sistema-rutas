@@ -399,7 +399,6 @@ def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
         tiene_novedades_vendedor = False
 
         for dia in dias_semana:
-            # Filtrar los clientes que corresponden a este día específico en la semana seleccionada
             if col_dia_visita in df_v.columns:
                 df_dia = df_v[df_v[col_dia_visita].astype(str).str.contains(dia, case=False, na=False)]
             else:
@@ -411,7 +410,6 @@ def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
                 p_val = bool(row.get(col_pedido, False))
                 motivo = str(row.get(col_motivo, "")).strip()
                 
-                # Si fue visitado y hizo pedido -> SE IGNORA
                 if v_val and p_val:
                     continue
                     
@@ -1040,9 +1038,14 @@ with tab_ruta_vendedores:
                                 if col_chk not in st.session_state["df_clientes"].columns:
                                     st.session_state["df_clientes"][col_chk] = False if ("Visita_" in col_chk or "Pedido_" in col_chk) else ""
                             
-                            st.session_state["df_clientes"].at[g_idx, col_visita_estatus] = row_edit[col_visita_estatus]
-                            st.session_state["df_clientes"].at[g_idx, col_pedido_estatus] = row_edit[col_pedido_estatus]
-                            st.session_state["df_clientes"].at[g_idx, col_motivo_estatus] = row_edit[col_motivo_estatus]
+                            val_visita = bool(row_edit.get(col_visita_estatus, False))
+                            val_pedido = bool(row_edit.get(col_pedido_estatus, False))
+                            raw_motivo = row_edit.get(col_motivo_estatus, "")
+                            val_motivo = "" if pd.isna(raw_motivo) or raw_motivo is False or str(raw_motivo).lower() in ["false", "none", "nan"] else str(raw_motivo)
+
+                            st.session_state["df_clientes"].loc[g_idx, col_visita_estatus] = val_visita
+                            st.session_state["df_clientes"].loc[g_idx, col_pedido_estatus] = val_pedido
+                            st.session_state["df_clientes"].loc[g_idx, col_motivo_estatus] = val_motivo
                     
                     guardar_en_base_de_datos(st.session_state["df_clientes"], vendedor_guardar=vendedor, semana_guardar=semana_seleccionada, dia_guardar=dia_seleccionado)
                     st.rerun()
