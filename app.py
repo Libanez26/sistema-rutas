@@ -361,7 +361,11 @@ def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
     )
     subtitle_style = ParagraphStyle(
         'SubtitleStyle', parent=styles['Heading2'], fontSize=9,
-        textColor=colors.HexColor('#4b5563'), spaceAfter=8
+        textColor=colors.HexColor('#4b5563'), spaceAfter=4
+    )
+    day_header_style = ParagraphStyle(
+        'DayHeaderStyle', parent=styles['Heading3'], fontSize=8,
+        textColor=colors.HexColor('#1f2937'), fontName="Helvetica-Bold", spaceAfter=2, spaceBetween=2
     )
     cell_style = ParagraphStyle(
         'CellStyle', parent=styles['Normal'], fontSize=7, leading=9,
@@ -376,83 +380,96 @@ def generar_pdf_novedades_excepciones(df_rutas, semana_evaluar="Semana 1"):
     col_visita = f"Visita_S{s_num}"
     col_pedido = f"Pedido_S{s_num}"
     col_motivo = f"Motivo_Pedido_S{s_num}"
+    col_dia_visita = f"Día de Visita {semana_evaluar}"
 
-    story.append(Paragraph(f"<b>REPORTE DE NOVEDADES Y MOTIVOS DE GESTIÓN ({semana_evaluar.upper()})</b>", title_style))
+    story.append(Paragraph(f"<b>REPORTE DE NOVEDADES DESGLOSADO POR DÍA ({semana_evaluar.upper()})</b>", title_style))
     story.append(Paragraph(f"Fecha de reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
     story.append(Spacer(1, 4))
 
     vendedores_unicos = [str(v).strip() for v in df_rutas["Vendedor"].dropna().unique() if str(v).strip() != ""]
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
     for idx_v, vendedor in enumerate(vendedores_unicos):
         if idx_v > 0:
             story.append(PageBreak())
 
         df_v = df_rutas[df_rutas["Vendedor"].astype(str).str.strip() == vendedor]
-        
-        novedades_list = []
-        for _, row in df_v.iterrows():
-            v_val = bool(row.get(col_visita, False))
-            p_val = bool(row.get(col_pedido, False))
-            motivo = str(row.get(col_motivo, "")).strip()
-            
-            # Si fue visitado y hizo pedido -> SE IGNORA
-            if v_val and p_val:
-                continue
-                
-            if v_val and not p_val:
-                condicion = "Visitado / SIN Pedido"
-            elif not v_val and not p_val:
-                condicion = "NO Visitado / SIN Pedido"
-            elif not v_val and p_val:
-                condicion = "NO Visitado / CON Pedido"
-            else:
-                condicion = "Novedad"
-                
-            novedades_list.append({
-                "Cliente": row.get("Cliente", ""),
-                "Ubicación": row.get("Ubicacion", ""),
-                "Condición": condicion,
-                "Motivo / Observación": motivo if motivo else "Sin justificación dada"
-            })
-
         story.append(Paragraph(f"<b>VENDEDOR: {vendedor.upper()}</b>", subtitle_style))
 
-        if not novedades_list:
-            story.append(Paragraph("<i>No hay novedades registradas (Todos los clientes completaron visita con pedido).</i>", cell_style))
-            story.append(Spacer(1, 10))
-            continue
+        tiene_novedades_vendedor = False
 
-        headers = [
-            Paragraph("CLIENTE", header_style),
-            Paragraph("UBICACIÓN", header_style),
-            Paragraph("ESTATUS NOVEDAD", header_style),
-            Paragraph("MOTIVO / OBSERVACIÓN", header_style)
-        ]
-        
-        matriz_tabla = [headers]
-        for item in novedades_list:
-            matriz_tabla.append([
-                Paragraph(f"<b>{item['Cliente']}</b>", cell_style),
-                Paragraph(item["Ubicación"], cell_style),
-                Paragraph(f"<b>{item['Condición']}</b>", cell_style),
-                Paragraph(item["Motivo / Observación"], cell_style)
-            ])
+        for dia in dias_semana:
+            # Filtrar los clientes que corresponden a este día específico en la semana seleccionada
+            if col_dia_visita in df_v.columns:
+                df_dia = df_v[df_v[col_dia_visita].astype(str).str.contains(dia, case=False, na=False)]
+            else:
+                df_dia = pd.DataFrame()
 
-        t = Table(matriz_tabla, colWidths=[180, 150, 160, 260])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
-            ('TOPPADDING', (0,0), (-1,-1), 3),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-            ('LEFTPADDING', (0,0), (-1,-1), 4),
-            ('RIGHTPADDING', (0,0), (-1,-1), 4),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
-        ]))
-        
-        story.append(t)
-        story.append(Spacer(1, 10))
+            novedades_dia = []
+            for _, row in df_dia.iterrows():
+                v_val = bool(row.get(col_visita, False))
+                p_val = bool(row.get(col_pedido, False))
+                motivo = str(row.get(col_motivo, "")).strip()
+                
+                # Si fue visitado y hizo pedido -> SE IGNORA
+                if v_val and p_val:
+                    continue
+                    
+                if v_val and not p_val:
+                    condicion = "Visitado / SIN Pedido"
+                elif not v_val and not p_val:
+                    condicion = "NO Visitado / SIN Pedido"
+                elif not v_val and p_val:
+                    condicion = "NO Visitado / CON Pedido"
+                else:
+                    condicion = "Novedad"
+                    
+                novedades_dia.append({
+                    "Cliente": row.get("Cliente", ""),
+                    "Ubicación": row.get("Ubicacion", ""),
+                    "Condición": condicion,
+                    "Motivo / Observación": motivo if motivo else "Sin justificación dada"
+                })
+
+            if novedades_dia:
+                tiene_novedades_vendedor = True
+                story.append(Paragraph(f"<b>Día: {dia}</b>", day_header_style))
+                
+                headers = [
+                    Paragraph("CLIENTE", header_style),
+                    Paragraph("UBICACIÓN", header_style),
+                    Paragraph("ESTATUS NOVEDAD", header_style),
+                    Paragraph("MOTIVO / OBSERVACIÓN", header_style)
+                ]
+                
+                matriz_tabla = [headers]
+                for item in novedades_dia:
+                    matriz_tabla.append([
+                        Paragraph(f"<b>{item['Cliente']}</b>", cell_style),
+                        Paragraph(item["Ubicación"], cell_style),
+                        Paragraph(f"<b>{item['Condición']}</b>", cell_style),
+                        Paragraph(item["Motivo / Observación"], cell_style)
+                    ])
+
+                t = Table(matriz_tabla, colWidths=[180, 150, 160, 260])
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+                    ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d1d5db')),
+                    ('TOPPADDING', (0,0), (-1,-1), 2),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+                    ('LEFTPADDING', (0,0), (-1,-1), 4),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 4),
+                    ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9fafb')])
+                ]))
+                
+                story.append(t)
+                story.append(Spacer(1, 4))
+
+        if not tiene_novedades_vendedor:
+            story.append(Paragraph("<i>No hay novedades registradas para este vendedor en esta semana.</i>", cell_style))
+            story.append(Spacer(1, 6))
 
     doc.build(story)
     buffer.seek(0)
@@ -629,7 +646,6 @@ def guardar_en_base_de_datos(df, vendedor_guardar=None, semana_guardar="Semana 1
       if registros_personal:
         supabase.table("personal_rutas").insert(registros_personal).execute()
 
-      # Guardar en Historial Diario si se especifica
       if vendedor_guardar:
         fecha_hoy = datetime.now().strftime("%Y-%m-%d")
         s_num = "1" if "1" in semana_guardar else "2"
@@ -703,7 +719,7 @@ def calcular_despacho_por_dia_y_semana(dia_visita_str, semana_actual, tiempo_des
 
     return ", ".join(resultados_despacho) if resultados_despacho else "No asignado"
 
-# Pestañas de la aplicación (Incluyendo Novedades y Buscador de Historial)
+# Pestañas de la aplicación
 tab_general, tab_ruta_vendedores, tab_novedades, tab_historial, tab_ruta_despacho = st.tabs([
     "📊 Cuadro Maestro General", 
     "🚚 Ruta de Vendedores", 
@@ -1065,7 +1081,7 @@ with tab_ruta_vendedores:
 
 with tab_novedades:
     st.header("🚨 Reporte de Novedades y Excepciones de Gestión")
-    st.markdown("Filtra automáticamente los casos que requieren justificación (omitiendo visitas con pedido exitosas).")
+    st.markdown("Filtra automáticamente los casos que requieren justificación desglosados por **Día de la Semana**.")
 
     col_nov1, col_nov2 = st.columns([2, 1])
     with col_nov1:
